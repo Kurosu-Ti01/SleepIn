@@ -1,0 +1,31 @@
+package com.kurosu.sleepin.di
+
+import com.kurosu.sleepin.data.local.SleepInDatabase
+import com.kurosu.sleepin.data.repository.CourseRepositoryImpl
+import com.kurosu.sleepin.data.repository.ScheduleRepositoryImpl
+import com.kurosu.sleepin.data.repository.TimetableRepositoryImpl
+import com.kurosu.sleepin.domain.repository.CourseRepository
+import com.kurosu.sleepin.domain.repository.ScheduleRepository
+import com.kurosu.sleepin.domain.repository.TimetableRepository
+
+/**
+ * Temporary manual repository provider.
+ * Mirrors future Hilt bindings and keeps call sites stable for later migration.
+ */
+object RepositoryModule {
+
+    fun provideTimetableRepository(database: SleepInDatabase): TimetableRepository =
+        TimetableRepositoryImpl(DatabaseModule.provideTimetableDao(database))
+
+    fun provideCourseRepository(database: SleepInDatabase): CourseRepository =
+        CourseRepositoryImpl(
+            courseDao = DatabaseModule.provideCourseDao(database),
+            courseSessionDao = DatabaseModule.provideCourseSessionDao(database)
+        )
+
+    fun provideScheduleRepository(database: SleepInDatabase): ScheduleRepository =
+        ScheduleRepositoryImpl(
+            scheduleDao = DatabaseModule.provideScheduleDao(database),
+            schedulePeriodDao = DatabaseModule.provideSchedulePeriodDao(database)
+        )
+}
