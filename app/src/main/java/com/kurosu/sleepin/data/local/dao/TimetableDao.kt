@@ -19,6 +19,9 @@ interface TimetableDao {
     @Query("SELECT * FROM timetables WHERE isActive = 1 LIMIT 1")
     fun observeActiveTimetable(): Flow<TimetableEntity?>
 
+    @Query("SELECT COUNT(*) FROM timetables WHERE scheduleId = :scheduleId")
+    suspend fun countByScheduleId(scheduleId: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(timetable: TimetableEntity): Long
 
@@ -31,4 +34,3 @@ interface TimetableDao {
     @Query("UPDATE timetables SET isActive = CASE WHEN id = :activeId THEN 1 ELSE 0 END")
     suspend fun setActiveTimetable(activeId: Long)
 }
-
