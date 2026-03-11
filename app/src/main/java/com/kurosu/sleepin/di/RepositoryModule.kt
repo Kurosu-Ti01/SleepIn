@@ -25,7 +25,9 @@ object RepositoryModule {
 
     fun provideScheduleRepository(database: SleepInDatabase): ScheduleRepository =
         ScheduleRepositoryImpl(
+            database = database,
             scheduleDao = DatabaseModule.provideScheduleDao(database),
-            schedulePeriodDao = DatabaseModule.provideSchedulePeriodDao(database)
+            schedulePeriodDao = DatabaseModule.provideSchedulePeriodDao(database),
+            timetableDao = DatabaseModule.provideTimetableDao(database)
         )
 }
