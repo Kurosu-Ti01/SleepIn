@@ -73,7 +73,7 @@ fun SleepInNavHost(
             arguments = listOf(
                 navArgument(Screen.ScheduleEditor.ARG_SCHEDULE_ID) {
                     type = NavType.LongType
-                    nullable = true
+                    // LongType is non-nullable in Navigation; use sentinel default for create mode.
                     defaultValue = -1L
                 }
             )
