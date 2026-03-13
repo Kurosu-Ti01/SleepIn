@@ -9,6 +9,13 @@ import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleUsageCountUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetSchedulesUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.SaveScheduleUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.SeedDefaultScheduleUseCase
+import com.kurosu.sleepin.domain.usecase.timetable.CreateTimetableUseCase
+import com.kurosu.sleepin.domain.usecase.timetable.DeleteTimetableUseCase
+import com.kurosu.sleepin.domain.usecase.timetable.GetActiveTimetableUseCase
+import com.kurosu.sleepin.domain.usecase.timetable.GetTimetableDetailUseCase
+import com.kurosu.sleepin.domain.usecase.timetable.GetTimetablesUseCase
+import com.kurosu.sleepin.domain.usecase.timetable.SetActiveTimetableUseCase
+import com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +42,21 @@ class SleepInApplication : Application() {
     lateinit var deleteScheduleUseCase: DeleteScheduleUseCase
         private set
 
+    lateinit var getTimetablesUseCase: GetTimetablesUseCase
+        private set
+    lateinit var getActiveTimetableUseCase: GetActiveTimetableUseCase
+        private set
+    lateinit var getTimetableDetailUseCase: GetTimetableDetailUseCase
+        private set
+    lateinit var createTimetableUseCase: CreateTimetableUseCase
+        private set
+    lateinit var updateTimetableUseCase: UpdateTimetableUseCase
+        private set
+    lateinit var deleteTimetableUseCase: DeleteTimetableUseCase
+        private set
+    lateinit var setActiveTimetableUseCase: SetActiveTimetableUseCase
+        private set
+
     private lateinit var seedDefaultScheduleUseCase: SeedDefaultScheduleUseCase
 
     // Dedicated app scope for lightweight startup tasks.
@@ -50,6 +72,7 @@ class SleepInApplication : Application() {
     private fun initGraph() {
         val database = DatabaseModule.provideDatabase(this)
         val scheduleRepository = RepositoryModule.provideScheduleRepository(database)
+        val timetableRepository = RepositoryModule.provideTimetableRepository(database)
 
         getSchedulesUseCase = GetSchedulesUseCase(scheduleRepository)
         getScheduleDetailUseCase = GetScheduleDetailUseCase(scheduleRepository)
@@ -57,6 +80,14 @@ class SleepInApplication : Application() {
         saveScheduleUseCase = SaveScheduleUseCase(scheduleRepository)
         deleteScheduleUseCase = DeleteScheduleUseCase(scheduleRepository)
         seedDefaultScheduleUseCase = SeedDefaultScheduleUseCase(scheduleRepository)
+
+        getTimetablesUseCase = GetTimetablesUseCase(timetableRepository)
+        getActiveTimetableUseCase = GetActiveTimetableUseCase(timetableRepository)
+        getTimetableDetailUseCase = GetTimetableDetailUseCase(timetableRepository)
+        createTimetableUseCase = CreateTimetableUseCase(timetableRepository)
+        updateTimetableUseCase = UpdateTimetableUseCase(timetableRepository)
+        deleteTimetableUseCase = DeleteTimetableUseCase(timetableRepository)
+        setActiveTimetableUseCase = SetActiveTimetableUseCase(timetableRepository)
     }
 
     /**

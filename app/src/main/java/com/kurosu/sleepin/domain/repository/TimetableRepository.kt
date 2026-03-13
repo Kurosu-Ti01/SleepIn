@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 interface TimetableRepository {
     fun observeTimetables(): Flow<List<Timetable>>
     fun observeActiveTimetable(): Flow<Timetable?>
+    suspend fun getTimetableById(timetableId: Long): Timetable?
     suspend fun upsertTimetable(timetable: Timetable): Long
     suspend fun deleteTimetable(timetableId: Long)
     suspend fun setActiveTimetable(timetableId: Long)

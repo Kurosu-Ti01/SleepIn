@@ -21,6 +21,9 @@ class TimetableRepositoryImpl(
     override fun observeActiveTimetable(): Flow<Timetable?> =
         timetableDao.observeActiveTimetable().map { entity -> entity?.toDomain() }
 
+    override suspend fun getTimetableById(timetableId: Long): Timetable? =
+        timetableDao.getById(timetableId)?.toDomain()
+
     override suspend fun upsertTimetable(timetable: Timetable): Long {
         val entity = timetable.toEntity()
         return if (entity.id == 0L) {
