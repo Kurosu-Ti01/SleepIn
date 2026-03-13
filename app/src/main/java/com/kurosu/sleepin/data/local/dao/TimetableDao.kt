@@ -19,6 +19,9 @@ interface TimetableDao {
     @Query("SELECT * FROM timetables WHERE isActive = 1 LIMIT 1")
     fun observeActiveTimetable(): Flow<TimetableEntity?>
 
+    @Query("SELECT * FROM timetables WHERE id = :timetableId LIMIT 1")
+    suspend fun getById(timetableId: Long): TimetableEntity?
+
     @Query("SELECT COUNT(*) FROM timetables WHERE scheduleId = :scheduleId")
     suspend fun countByScheduleId(scheduleId: Long): Int
 

@@ -11,11 +11,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.kurosu.sleepin.SleepInApplication
 import com.kurosu.sleepin.ui.screen.home.HomeScreen
+import com.kurosu.sleepin.ui.screen.home.HomeViewModel
 import com.kurosu.sleepin.ui.screen.schedule.ScheduleEditorScreen
 import com.kurosu.sleepin.ui.screen.schedule.ScheduleListScreen
 import com.kurosu.sleepin.ui.screen.schedule.ScheduleListViewModel
 import com.kurosu.sleepin.ui.screen.settings.SettingsScreen
+import com.kurosu.sleepin.ui.screen.timetable.TimetableEditorScreen
 import com.kurosu.sleepin.ui.screen.timetable.TimetableListScreen
+import com.kurosu.sleepin.ui.screen.timetable.TimetableListViewModel
+import com.kurosu.sleepin.ui.screen.timetable.rememberTimetableEditorViewModel
 
 /**
  * App-level navigation graph for all top-level screens.
@@ -36,15 +40,63 @@ fun SleepInNavHost(
         modifier = modifier
     ) {
         composable(Screen.Home.route) {
+            val vm: HomeViewModel = viewModel(
+                factory = HomeViewModel.factory(
+                    getTimetablesUseCase = app.getTimetablesUseCase,
+                    getSchedulesUseCase = app.getSchedulesUseCase,
+                    setActiveTimetableUseCase = app.setActiveTimetableUseCase
+                )
+            )
             HomeScreen(
                 onTimetableListClick = { navController.navigate(Screen.TimetableList.route) },
                 onScheduleListClick = { navController.navigate(Screen.ScheduleList.route) },
-                onSettingsClick = { navController.navigate(Screen.Settings.route) }
+                onSettingsClick = { navController.navigate(Screen.Settings.route) },
+                viewModel = vm
             )
         }
 
         composable(Screen.TimetableList.route) {
-            TimetableListScreen(onBackClick = { navController.popBackStack() })
+            val vm: TimetableListViewModel = viewModel(
+                factory = TimetableListViewModel.factory(
+                    getTimetablesUseCase = app.getTimetablesUseCase,
+                    getSchedulesUseCase = app.getSchedulesUseCase,
+                    setActiveTimetableUseCase = app.setActiveTimetableUseCase,
+                    deleteTimetableUseCase = app.deleteTimetableUseCase
+                )
+            )
+            TimetableListScreen(
+                onBackClick = { navController.popBackStack() },
+                onCreateClick = { navController.navigate(Screen.TimetableEditor.createRoute()) },
+                onEditClick = { timetableId ->
+                    navController.navigate(Screen.TimetableEditor.createRoute(timetableId))
+                },
+                viewModel = vm
+            )
+        }
+
+        composable(
+            route = Screen.TimetableEditor.route,
+            arguments = listOf(
+                navArgument(Screen.TimetableEditor.ARG_TIMETABLE_ID) {
+                    type = NavType.LongType
+                    // LongType cannot be nullable in nav args, so -1 means create mode.
+                    defaultValue = -1L
+                }
+            )
+        ) { backStackEntry ->
+            val raw = backStackEntry.arguments?.getLong(Screen.TimetableEditor.ARG_TIMETABLE_ID) ?: -1L
+            val timetableId = raw.takeIf { it > 0L }
+            val vm = rememberTimetableEditorViewModel(
+                timetableId = timetableId,
+                getSchedulesUseCase = app.getSchedulesUseCase,
+                getTimetableDetailUseCase = app.getTimetableDetailUseCase,
+                createTimetableUseCase = app.createTimetableUseCase,
+                updateTimetableUseCase = app.updateTimetableUseCase
+            )
+            TimetableEditorScreen(
+                onBackClick = { navController.popBackStack() },
+                viewModel = vm
+            )
         }
 
         // Schedule list route: create ViewModel using app-scoped use cases.

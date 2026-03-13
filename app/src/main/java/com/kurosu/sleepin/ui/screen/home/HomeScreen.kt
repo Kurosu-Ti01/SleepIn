@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kurosu.sleepin.ui.menu.HomeMenuSheet
 
 /**
@@ -38,7 +37,7 @@ fun HomeScreen(
     onTimetableListClick: () -> Unit,
     onScheduleListClick: () -> Unit,
     onSettingsClick: () -> Unit,
-    viewModel: HomeViewModel = viewModel()
+    viewModel: HomeViewModel
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showMenuSheet by remember { mutableStateOf(false) }
@@ -82,8 +81,10 @@ fun HomeScreen(
             HomeMenuSheet(
                 selectedTimetable = uiState.selectedTimetable,
                 selectedSchedule = uiState.selectedSchedule,
+                timetableOptions = uiState.timetables,
                 selectedWeek = uiState.selectedWeek,
                 totalWeeks = uiState.totalWeeks,
+                onTimetableSelected = viewModel::onTimetableSelected,
                 onWeekChange = viewModel::onWeekChanged,
                 onTimetableListClick = {
                     showMenuSheet = false
