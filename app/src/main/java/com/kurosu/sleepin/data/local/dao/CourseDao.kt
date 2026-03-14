@@ -4,8 +4,10 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import com.kurosu.sleepin.data.local.entity.CourseEntity
+import com.kurosu.sleepin.data.local.entity.CourseWithSessionsEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -13,8 +15,20 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface CourseDao {
+    @Transaction
+    @Query("SELECT * FROM courses WHERE timetableId = :timetableId ORDER BY id DESC")
+    fun observeWithSessionsByTimetable(timetableId: Long): Flow<List<CourseWithSessionsEntity>>
+
     @Query("SELECT * FROM courses WHERE timetableId = :timetableId ORDER BY id DESC")
     fun observeByTimetable(timetableId: Long): Flow<List<CourseEntity>>
+
+    @Transaction
+    @Query("SELECT * FROM courses WHERE timetableId = :timetableId ORDER BY id DESC")
+    suspend fun getWithSessionsByTimetable(timetableId: Long): List<CourseWithSessionsEntity>
+
+    @Transaction
+    @Query("SELECT * FROM courses WHERE id = :courseId LIMIT 1")
+    suspend fun getWithSessionsById(courseId: Long): CourseWithSessionsEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(course: CourseEntity): Long

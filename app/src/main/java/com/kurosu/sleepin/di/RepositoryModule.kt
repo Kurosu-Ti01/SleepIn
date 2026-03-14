@@ -19,6 +19,7 @@ object RepositoryModule {
 
     fun provideCourseRepository(database: SleepInDatabase): CourseRepository =
         CourseRepositoryImpl(
+            database = database,
             courseDao = DatabaseModule.provideCourseDao(database),
             courseSessionDao = DatabaseModule.provideCourseSessionDao(database)
         )

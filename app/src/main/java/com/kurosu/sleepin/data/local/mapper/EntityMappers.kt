@@ -2,11 +2,13 @@ package com.kurosu.sleepin.data.local.mapper
 
 import com.kurosu.sleepin.data.local.entity.CourseEntity
 import com.kurosu.sleepin.data.local.entity.CourseSessionEntity
+import com.kurosu.sleepin.data.local.entity.CourseWithSessionsEntity
 import com.kurosu.sleepin.data.local.entity.ScheduleEntity
 import com.kurosu.sleepin.data.local.entity.SchedulePeriodEntity
 import com.kurosu.sleepin.data.local.entity.TimetableEntity
 import com.kurosu.sleepin.domain.model.Course
 import com.kurosu.sleepin.domain.model.CourseSession
+import com.kurosu.sleepin.domain.model.CourseWithSessions
 import com.kurosu.sleepin.domain.model.Schedule
 import com.kurosu.sleepin.domain.model.SchedulePeriod
 import com.kurosu.sleepin.domain.model.Timetable
@@ -56,6 +58,11 @@ fun Course.toEntity(): CourseEntity = CourseEntity(
     color = color,
     note = note,
     createdAt = createdAt
+)
+
+fun CourseWithSessionsEntity.toDomain(): CourseWithSessions = CourseWithSessions(
+    course = course.toDomain(),
+    sessions = sessions.map { it.toDomain() }
 )
 
 fun CourseSessionEntity.toDomain(): CourseSession = CourseSession(

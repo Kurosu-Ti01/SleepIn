@@ -9,6 +9,12 @@ import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleUsageCountUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetSchedulesUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.SaveScheduleUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.SeedDefaultScheduleUseCase
+import com.kurosu.sleepin.domain.usecase.course.AddCourseUseCase
+import com.kurosu.sleepin.domain.usecase.course.CheckConflictUseCase
+import com.kurosu.sleepin.domain.usecase.course.DeleteCourseUseCase
+import com.kurosu.sleepin.domain.usecase.course.GetCourseDetailUseCase
+import com.kurosu.sleepin.domain.usecase.course.GetCoursesForTimetableUseCase
+import com.kurosu.sleepin.domain.usecase.course.UpdateCourseUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.CreateTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.DeleteTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.GetActiveTimetableUseCase
@@ -42,6 +48,17 @@ class SleepInApplication : Application() {
     lateinit var deleteScheduleUseCase: DeleteScheduleUseCase
         private set
 
+    lateinit var getCoursesForTimetableUseCase: GetCoursesForTimetableUseCase
+        private set
+    lateinit var getCourseDetailUseCase: GetCourseDetailUseCase
+        private set
+    lateinit var addCourseUseCase: AddCourseUseCase
+        private set
+    lateinit var updateCourseUseCase: UpdateCourseUseCase
+        private set
+    lateinit var deleteCourseUseCase: DeleteCourseUseCase
+        private set
+
     lateinit var getTimetablesUseCase: GetTimetablesUseCase
         private set
     lateinit var getActiveTimetableUseCase: GetActiveTimetableUseCase
@@ -73,6 +90,8 @@ class SleepInApplication : Application() {
         val database = DatabaseModule.provideDatabase(this)
         val scheduleRepository = RepositoryModule.provideScheduleRepository(database)
         val timetableRepository = RepositoryModule.provideTimetableRepository(database)
+        val courseRepository = RepositoryModule.provideCourseRepository(database)
+        val checkConflictUseCase = CheckConflictUseCase(courseRepository)
 
         getSchedulesUseCase = GetSchedulesUseCase(scheduleRepository)
         getScheduleDetailUseCase = GetScheduleDetailUseCase(scheduleRepository)
@@ -80,6 +99,12 @@ class SleepInApplication : Application() {
         saveScheduleUseCase = SaveScheduleUseCase(scheduleRepository)
         deleteScheduleUseCase = DeleteScheduleUseCase(scheduleRepository)
         seedDefaultScheduleUseCase = SeedDefaultScheduleUseCase(scheduleRepository)
+
+        getCoursesForTimetableUseCase = GetCoursesForTimetableUseCase(courseRepository)
+        getCourseDetailUseCase = GetCourseDetailUseCase(courseRepository)
+        addCourseUseCase = AddCourseUseCase(courseRepository, checkConflictUseCase)
+        updateCourseUseCase = UpdateCourseUseCase(courseRepository, checkConflictUseCase)
+        deleteCourseUseCase = DeleteCourseUseCase(courseRepository)
 
         getTimetablesUseCase = GetTimetablesUseCase(timetableRepository)
         getActiveTimetableUseCase = GetActiveTimetableUseCase(timetableRepository)
