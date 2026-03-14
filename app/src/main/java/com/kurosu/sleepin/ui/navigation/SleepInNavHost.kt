@@ -12,6 +12,10 @@ import androidx.navigation.navArgument
 import com.kurosu.sleepin.SleepInApplication
 import com.kurosu.sleepin.ui.screen.home.HomeScreen
 import com.kurosu.sleepin.ui.screen.home.HomeViewModel
+import com.kurosu.sleepin.ui.screen.course.CourseEditorScreen
+import com.kurosu.sleepin.ui.screen.course.CourseListScreen
+import com.kurosu.sleepin.ui.screen.course.CourseListViewModel
+import com.kurosu.sleepin.ui.screen.course.rememberCourseEditorViewModel
 import com.kurosu.sleepin.ui.screen.schedule.ScheduleEditorScreen
 import com.kurosu.sleepin.ui.screen.schedule.ScheduleListScreen
 import com.kurosu.sleepin.ui.screen.schedule.ScheduleListViewModel
@@ -70,6 +74,68 @@ fun SleepInNavHost(
                 onEditClick = { timetableId ->
                     navController.navigate(Screen.TimetableEditor.createRoute(timetableId))
                 },
+                onOpenCoursesClick = { timetableId ->
+                    navController.navigate(Screen.CourseList.createRoute(timetableId))
+                },
+                viewModel = vm
+            )
+        }
+
+        composable(
+            route = Screen.CourseList.route,
+            arguments = listOf(
+                navArgument(Screen.CourseList.ARG_TIMETABLE_ID) {
+                    type = NavType.LongType
+                }
+            )
+        ) { backStackEntry ->
+            val timetableId = backStackEntry.arguments?.getLong(Screen.CourseList.ARG_TIMETABLE_ID) ?: -1L
+            val vm: CourseListViewModel = viewModel(
+                key = "course_list_$timetableId",
+                factory = CourseListViewModel.factory(
+                    timetableId = timetableId,
+                    getCoursesForTimetableUseCase = app.getCoursesForTimetableUseCase,
+                    deleteCourseUseCase = app.deleteCourseUseCase
+                )
+            )
+            CourseListScreen(
+                onBackClick = { navController.popBackStack() },
+                onCreateClick = { navController.navigate(Screen.CourseEditor.createRoute(timetableId)) },
+                onEditClick = { courseId ->
+                    navController.navigate(Screen.CourseEditor.createRoute(timetableId = timetableId, courseId = courseId))
+                },
+                viewModel = vm
+            )
+        }
+
+        composable(
+            route = Screen.CourseEditor.route,
+            arguments = listOf(
+                navArgument(Screen.CourseEditor.ARG_TIMETABLE_ID) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+                navArgument(Screen.CourseEditor.ARG_COURSE_ID) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                }
+            )
+        ) { backStackEntry ->
+            val timetableRaw = backStackEntry.arguments?.getLong(Screen.CourseEditor.ARG_TIMETABLE_ID) ?: -1L
+            val courseRaw = backStackEntry.arguments?.getLong(Screen.CourseEditor.ARG_COURSE_ID) ?: -1L
+            val courseId = courseRaw.takeIf { it > 0L }
+
+            val vm = rememberCourseEditorViewModel(
+                timetableId = timetableRaw,
+                courseId = courseId,
+                getTimetableDetailUseCase = app.getTimetableDetailUseCase,
+                getScheduleDetailUseCase = app.getScheduleDetailUseCase,
+                getCourseDetailUseCase = app.getCourseDetailUseCase,
+                addCourseUseCase = app.addCourseUseCase,
+                updateCourseUseCase = app.updateCourseUseCase
+            )
+            CourseEditorScreen(
+                onBackClick = { navController.popBackStack() },
                 viewModel = vm
             )
         }
