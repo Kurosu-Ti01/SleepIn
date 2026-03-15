@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kurosu.sleepin.ui.menu.HomeMenuSheet
@@ -56,8 +57,22 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("第 ${uiState.selectedWeek} 周", style = MaterialTheme.typography.titleMedium)
-                        Text(uiState.topBarDateText, style = MaterialTheme.typography.bodySmall)
+                        // Top line is always today's real date in bold, independent from selected week.
+                        Text(
+                            text = uiState.todayDateText,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        // Bottom line shows selected week and, when needed, current semester week.
+                        Text(
+                            text = when {
+                                uiState.currentWeek == null || uiState.currentWeek == uiState.selectedWeek -> {
+                                    "第 ${uiState.selectedWeek} 周"
+                                }
+                                else -> "第 ${uiState.selectedWeek} 周 当前为第 ${uiState.currentWeek} 周"
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 },
                 actions = {

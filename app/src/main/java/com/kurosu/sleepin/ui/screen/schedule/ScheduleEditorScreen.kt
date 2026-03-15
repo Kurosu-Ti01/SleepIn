@@ -177,20 +177,12 @@ fun ScheduleEditorScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("第 ${index + 1} 行")
+                        Text("第 ${index + 1} 节")
                         IconButton(onClick = { viewModel.removePeriod(index) }) {
                             Icon(Icons.Default.Delete, contentDescription = "删除课节")
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            modifier = Modifier.weight(1f),
-                            value = period.periodNumber,
-                            onValueChange = { viewModel.onPeriodNumberChange(index, it) },
-                            label = { Text("节次") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true
-                        )
                         OutlinedTextField(
                             modifier = Modifier.weight(1f),
                             value = period.startTime,

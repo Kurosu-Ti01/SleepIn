@@ -3,9 +3,8 @@ package com.kurosu.sleepin.ui.component
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,7 +37,10 @@ val DefaultCourseColors: List<Int> = listOf(
 )
 
 /**
- * Simple horizontal color picker for selecting a course display color.
+ * Wrapping color picker for selecting a course display color.
+ *
+ * We intentionally use [WrapFlowLayout] instead of a single-line row so the palette can reflow to
+ * multiple lines on narrow screens and under larger font/display scaling without clipping.
  */
 @Composable
 fun ColorPicker(
@@ -47,31 +49,35 @@ fun ColorPicker(
     modifier: Modifier = Modifier,
     colors: List<Int> = DefaultCourseColors
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        colors.forEach { colorInt ->
-            val color = Color(colorInt)
-            val isSelected = colorInt == selectedColor
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .background(color, CircleShape)
-                    .border(
-                        width = if (isSelected) 2.dp else 1.dp,
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                        shape = CircleShape
-                    )
-                    .clickable { onColorSelected(colorInt) }
-            )
+    Column(modifier = modifier.fillMaxWidth()) {
+        WrapFlowLayout(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalSpacing = 8.dp,
+            verticalSpacing = 8.dp
+        ) {
+            colors.forEach { colorInt ->
+                val color = Color(colorInt)
+                val isSelected = colorInt == selectedColor
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(color, CircleShape)
+                        .border(
+                            width = if (isSelected) 2.dp else 1.dp,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            shape = CircleShape
+                        )
+                        .clickable { onColorSelected(colorInt) }
+                )
+            }
         }
+
+        Text(
+            text = "Selected color: #${selectedColor.toUInt().toString(16).uppercase()}",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 6.dp)
+        )
     }
-    Text(
-        text = "Selected color: #${selectedColor.toUInt().toString(16).uppercase()}",
-        style = MaterialTheme.typography.bodySmall,
-        modifier = Modifier.padding(top = 6.dp)
-    )
 }
 
 

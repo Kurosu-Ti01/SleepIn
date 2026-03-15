@@ -2,7 +2,6 @@ package com.kurosu.sleepin.ui.screen.home
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -29,26 +28,29 @@ fun TimelineSidebar(
 ) {
     Column(modifier = modifier) {
         periods.forEach { period ->
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(rowHeight)
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 2.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${period.periodNumber}",
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = "${period.startTime.format(sidebarTimeFormatter)}-${period.endTime.format(sidebarTimeFormatter)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        textAlign = TextAlign.Center
-                    )
-                }
+                Text(
+                    text = "${period.periodNumber}",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = period.startTime.format(sidebarTimeFormatter),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = period.endTime.format(sidebarTimeFormatter),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f),
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }

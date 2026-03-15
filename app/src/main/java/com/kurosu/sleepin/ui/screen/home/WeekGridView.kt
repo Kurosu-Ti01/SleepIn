@@ -28,8 +28,8 @@ import androidx.compose.ui.unit.dp
 
 private const val WEEK_COLUMN_COUNT = 7
 private const val SWIPE_CHANGE_THRESHOLD_PX = 80f
-private val defaultRowHeight = 88.dp
-private val timelineColumnWidth = 76.dp
+private val defaultRowHeight = 68.dp
+private val timelineColumnWidth = 34.dp
 
 /**
  * Full week-view container that composes header, sidebar, grid background, and course cells.

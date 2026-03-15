@@ -177,6 +177,7 @@ class HomeViewModel(
                     hasActiveTimetable = active != null,
                     activeTimetableId = active?.id,
                     selectedWeek = selectedWeek,
+                    currentWeek = semesterInfo?.currentWeek,
                     totalWeeks = totalWeeks,
                     selectedTimetable = active?.name ?: "未选择课程表",
                     selectedSchedule = active?.let { scheduleNameMap[it.scheduleId] ?: "未知作息表" } ?: "未选择作息表",
@@ -191,12 +192,9 @@ class HomeViewModel(
                         SemesterProgress.AFTER_END -> "学期已结束"
                         else -> null
                     },
-                    topBarDateText = when {
-                        weekDates.isNotEmpty() -> {
-                            "${weekDates.first().format(topBarDateFormatter)} ~ ${weekDates.last().format(topBarDateFormatter)}"
-                        }
-                        else -> LocalDate.now().format(topBarDateFormatter)
-                    }
+                    // The top bar always shows the real-world "today" date,
+                    // regardless of which week the user is currently browsing.
+                    todayDateText = currentDateTime.toLocalDate().format(topBarDateFormatter)
                 )
             }.collect { state ->
                 _uiState.value = state
@@ -398,6 +396,7 @@ data class HomeUiState(
     val hasActiveTimetable: Boolean = false,
     val activeTimetableId: Long? = null,
     val selectedWeek: Int,
+    val currentWeek: Int? = null,
     val totalWeeks: Int,
     val selectedTimetable: String = "未选择课程表",
     val selectedSchedule: String = "未选择作息表",
@@ -408,6 +407,6 @@ data class HomeUiState(
     val todayColumnIndex: Int? = null,
     val currentTimePeriodOffset: Float? = null,
     val semesterStatusMessage: String? = null,
-    val topBarDateText: String = ""
+    val todayDateText: String = ""
 )
 

@@ -32,7 +32,6 @@ fun WeekHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
     ) {
         weekDayLabels.forEachIndexed { index, dayLabel ->
             val isToday = todayColumnIndex == index

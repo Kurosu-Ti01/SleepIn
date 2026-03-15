@@ -20,11 +20,10 @@ import java.time.LocalTime
  * UI-editable representation of one period row.
  *
  * Strings are used for inputs so text fields can preserve partial/incomplete user input
- * until validation runs in [save].
+ * until validation runs in the save action.
  */
 data class EditableSchedulePeriod(
     val id: Long,
-    val periodNumber: String,
     val startTime: String,
     val endTime: String
 )
@@ -37,7 +36,7 @@ data class ScheduleEditorUiState(
     val isSaving: Boolean = false,
     val name: String = "",
     val periods: List<EditableSchedulePeriod> = listOf(
-        EditableSchedulePeriod(id = 0, periodNumber = "1", startTime = "08:00", endTime = "08:45")
+        EditableSchedulePeriod(id = 0, startTime = "08:00", endTime = "08:45")
     ),
     // Fields used by the quick generation tool.
     val quickStartTime: String = "08:00",
@@ -108,10 +107,6 @@ class ScheduleEditorViewModel(
         _uiState.update { it.copy(quickPeriodCount = value) }
     }
 
-    fun onPeriodNumberChange(index: Int, value: String) {
-        updatePeriod(index) { it.copy(periodNumber = value) }
-    }
-
     fun onPeriodStartTimeChange(index: Int, value: String) {
         updatePeriod(index) { it.copy(startTime = value) }
     }
@@ -120,16 +115,12 @@ class ScheduleEditorViewModel(
         updatePeriod(index) { it.copy(endTime = value) }
     }
 
-    /**
-     * Appends a new row and auto-selects the next available period number.
-     */
+    /** Appends a new row. Period numbering is derived from row order at save time. */
     fun addPeriod() {
-        val next = (_uiState.value.periods.maxOfOrNull { it.periodNumber.toIntOrNull() ?: 0 } ?: 0) + 1
         _uiState.update {
             it.copy(
                 periods = it.periods + EditableSchedulePeriod(
                     id = 0,
-                    periodNumber = next.toString(),
                     startTime = "08:00",
                     endTime = "08:45"
                 )
@@ -169,11 +160,10 @@ class ScheduleEditorViewModel(
 
         val generated = mutableListOf<EditableSchedulePeriod>()
         var cursor = start
-        for (index in 1..periodCount) {
+        repeat(periodCount) {
             val end = cursor.plusMinutes(classDuration.toLong())
             generated += EditableSchedulePeriod(
                 id = 0,
-                periodNumber = index.toString(),
                 startTime = cursor.toString(),
                 endTime = end.toString()
             )
@@ -189,13 +179,12 @@ class ScheduleEditorViewModel(
     fun save() {
         viewModelScope.launch {
             val state = _uiState.value
-            val drafts = state.periods.mapNotNull { period ->
-                val number = period.periodNumber.toIntOrNull() ?: return@launch emitMessage("课节编号必须是整数")
+            val drafts = state.periods.mapIndexed { index, period ->
                 val start = parseTime(period.startTime) ?: return@launch emitMessage("开始时间格式应为 HH:mm")
                 val end = parseTime(period.endTime) ?: return@launch emitMessage("结束时间格式应为 HH:mm")
                 SaveScheduleUseCase.PeriodDraft(
                     id = period.id,
-                    periodNumber = number,
+                    periodNumber = index + 1,
                     startTime = start,
                     endTime = end
                 )
@@ -230,10 +219,11 @@ class ScheduleEditorViewModel(
                 it.copy(
                     isLoading = false,
                     name = detail.schedule.name,
-                    periods = detail.periods.map { period ->
+                    periods = detail.periods
+                        .sortedBy { it.periodNumber }
+                        .map { period ->
                         EditableSchedulePeriod(
                             id = period.id,
-                            periodNumber = period.periodNumber.toString(),
                             startTime = period.startTime.toString(),
                             endTime = period.endTime.toString()
                         )

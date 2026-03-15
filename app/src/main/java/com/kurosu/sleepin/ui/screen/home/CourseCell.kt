@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -12,7 +13,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /**
@@ -27,32 +34,42 @@ fun CourseCell(
     modifier: Modifier = Modifier,
     onClick: (HomeCourseCellUi) -> Unit
 ) {
+    val primaryPart = buildString {
+        append(cell.name)
+        if (!cell.location.isNullOrBlank()) {
+            append("@")
+            append(cell.location)
+        }
+    }
+    val teacherPart = cell.teacher?.takeIf { it.isNotBlank() }
+
     Card(
         modifier = modifier.clickable { onClick(cell) },
+        shape = RoundedCornerShape(6.dp),
         colors = CardDefaults.cardColors(containerColor = Color(cell.color))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                // Keep inner padding minimal so narrow columns can still show several CJK characters.
+                .padding(horizontal = 2.dp, vertical = 3.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = cell.name,
-                style = MaterialTheme.typography.labelLarge,
+                text = buildAnnotatedString {
+                    withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append(primaryPart)
+                    }
+                    if (!teacherPart.isNullOrBlank()) {
+                        append("\n") // Force teacher name to a new line to avoid truncation of course name/location.
+                        append(teacherPart)
+                    }
+                },
+                style = MaterialTheme.typography.labelMedium,
                 color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
             )
-            if (!cell.location.isNullOrBlank()) {
-                Text(
-                    text = cell.location,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.95f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
         }
     }
 }
