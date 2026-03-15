@@ -48,6 +48,9 @@ fun SleepInNavHost(
                 factory = HomeViewModel.factory(
                     getTimetablesUseCase = app.getTimetablesUseCase,
                     getSchedulesUseCase = app.getSchedulesUseCase,
+                    getActiveTimetableUseCase = app.getActiveTimetableUseCase,
+                    getCoursesForTimetableUseCase = app.getCoursesForTimetableUseCase,
+                    getScheduleDetailUseCase = app.getScheduleDetailUseCase,
                     setActiveTimetableUseCase = app.setActiveTimetableUseCase
                 )
             )
