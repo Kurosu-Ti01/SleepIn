@@ -71,6 +71,7 @@ dependencies {
     // Hilt dependencies are temporarily disabled to keep Phase 1 build green on AGP 9.
 
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

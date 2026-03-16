@@ -10,6 +10,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.kurosu.sleepin.SleepInApplication
+import com.kurosu.sleepin.domain.model.AppSettings
 import com.kurosu.sleepin.ui.screen.home.HomeScreen
 import com.kurosu.sleepin.ui.screen.home.HomeViewModel
 import com.kurosu.sleepin.ui.screen.course.CourseEditorScreen
@@ -20,6 +21,7 @@ import com.kurosu.sleepin.ui.screen.schedule.ScheduleEditorScreen
 import com.kurosu.sleepin.ui.screen.schedule.ScheduleListScreen
 import com.kurosu.sleepin.ui.screen.schedule.ScheduleListViewModel
 import com.kurosu.sleepin.ui.screen.settings.SettingsScreen
+import com.kurosu.sleepin.ui.screen.settings.SettingsViewModel
 import com.kurosu.sleepin.ui.screen.timetable.TimetableEditorScreen
 import com.kurosu.sleepin.ui.screen.timetable.TimetableListScreen
 import com.kurosu.sleepin.ui.screen.timetable.TimetableListViewModel
@@ -34,6 +36,7 @@ import com.kurosu.sleepin.ui.screen.timetable.rememberTimetableEditorViewModel
 @Composable
 fun SleepInNavHost(
     navController: NavHostController,
+    appSettings: AppSettings,
     modifier: Modifier = Modifier
 ) {
     val app = LocalContext.current.applicationContext as SleepInApplication
@@ -58,6 +61,7 @@ fun SleepInNavHost(
                 onTimetableListClick = { navController.navigate(Screen.TimetableList.route) },
                 onScheduleListClick = { navController.navigate(Screen.ScheduleList.route) },
                 onSettingsClick = { navController.navigate(Screen.Settings.route) },
+                courseRowHeightDp = appSettings.courseCellHeightDp,
                 viewModel = vm
             )
         }
@@ -158,9 +162,12 @@ fun SleepInNavHost(
             val vm = rememberTimetableEditorViewModel(
                 timetableId = timetableId,
                 getSchedulesUseCase = app.getSchedulesUseCase,
+                getScheduleDetailUseCase = app.getScheduleDetailUseCase,
                 getTimetableDetailUseCase = app.getTimetableDetailUseCase,
                 createTimetableUseCase = app.createTimetableUseCase,
-                updateTimetableUseCase = app.updateTimetableUseCase
+                updateTimetableUseCase = app.updateTimetableUseCase,
+                importCsvUseCase = app.importCsvUseCase,
+                exportCsvUseCase = app.exportCsvUseCase
             )
             TimetableEditorScreen(
                 onBackClick = { navController.popBackStack() },
@@ -213,7 +220,18 @@ fun SleepInNavHost(
         }
 
         composable(Screen.Settings.route) {
-            SettingsScreen(onBackClick = { navController.popBackStack() })
+            val vm: SettingsViewModel = viewModel(
+                factory = SettingsViewModel.factory(
+                    observeSettingsUseCase = app.observeSettingsUseCase,
+                    updateSettingsUseCase = app.updateSettingsUseCase,
+                    exportSettingsBackupUseCase = app.exportSettingsBackupUseCase,
+                    importSettingsBackupUseCase = app.importSettingsBackupUseCase
+                )
+            )
+            SettingsScreen(
+                onBackClick = { navController.popBackStack() },
+                viewModel = vm
+            )
         }
     }
 }

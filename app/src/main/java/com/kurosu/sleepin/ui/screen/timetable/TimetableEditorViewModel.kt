@@ -3,6 +3,9 @@ package com.kurosu.sleepin.ui.screen.timetable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
+import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
+import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleDetailUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetSchedulesUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.CreateTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.GetTimetableDetailUseCase
@@ -32,6 +35,7 @@ data class ScheduleOptionUi(
 data class TimetableEditorUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
+    val isCsvBusy: Boolean = false,
     val name: String = "",
     val totalWeeks: String = "18",
     val startDateText: String = LocalDate.now().toString(),
@@ -47,6 +51,7 @@ data class TimetableEditorUiState(
  */
 sealed interface TimetableEditorEvent {
     data object Saved : TimetableEditorEvent
+    data class ExportCsvReady(val fileName: String, val content: String) : TimetableEditorEvent
 }
 
 /**
@@ -60,9 +65,12 @@ sealed interface TimetableEditorEvent {
 class TimetableEditorViewModel(
     private val timetableId: Long?,
     private val getSchedulesUseCase: GetSchedulesUseCase,
+    private val getScheduleDetailUseCase: GetScheduleDetailUseCase,
     private val getTimetableDetailUseCase: GetTimetableDetailUseCase,
     private val createTimetableUseCase: CreateTimetableUseCase,
-    private val updateTimetableUseCase: UpdateTimetableUseCase
+    private val updateTimetableUseCase: UpdateTimetableUseCase,
+    private val importCsvUseCase: ImportCsvUseCase,
+    private val exportCsvUseCase: ExportCsvUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TimetableEditorUiState(isEditMode = timetableId != null))
@@ -100,6 +108,122 @@ class TimetableEditorViewModel(
 
     fun onScheduleChange(scheduleId: Long) {
         _uiState.update { it.copy(selectedScheduleId = scheduleId) }
+    }
+
+    /**
+     * Creates a brand-new timetable and immediately imports courses from a CSV payload.
+     *
+     * Why this flow exists:
+     * - CSV import requires a concrete `timetableId` as persistence target.
+     * - In create mode, that id does not exist until the timetable is saved successfully.
+     *
+     * This method therefore executes a two-step transaction-like sequence:
+     * 1) validate/create timetable,
+     * 2) resolve schedule max period and import CSV rows into the newly created timetable.
+     */
+    fun createAndImportCsv(rawCsv: String) {
+        if (timetableId != null) {
+            emitMessage("CSV import for existing timetable is not supported in create flow")
+            return
+        }
+
+        viewModelScope.launch {
+            val state = _uiState.value
+            val totalWeeks = state.totalWeeks.toIntOrNull()
+                ?: return@launch emitMessage("总周数必须是整数")
+            val startDate = runCatching { LocalDate.parse(state.startDateText.trim()) }.getOrNull()
+                ?: return@launch emitMessage("开学日期格式应为 yyyy-MM-dd")
+            val scheduleId = state.selectedScheduleId
+                ?: return@launch emitMessage("请选择作息表")
+
+            _uiState.update { it.copy(isSaving = true, isCsvBusy = true) }
+
+            when (
+                val createResult = createTimetableUseCase(
+                    name = state.name,
+                    totalWeeks = totalWeeks,
+                    startDate = startDate,
+                    scheduleId = scheduleId,
+                    colorScheme = state.colorScheme
+                )
+            ) {
+                is TimetableSaveResult.Success -> {
+                    val scheduleDetail = getScheduleDetailUseCase(scheduleId)
+                    val maxPeriod = scheduleDetail?.periods?.maxOfOrNull { it.periodNumber }
+                    if (maxPeriod == null || maxPeriod <= 0) {
+                        _uiState.update {
+                            it.copy(
+                                isSaving = false,
+                                isCsvBusy = false,
+                                message = "所选作息表没有可用课节，无法导入 CSV"
+                            )
+                        }
+                        return@launch
+                    }
+
+                    val report = importCsvUseCase(
+                        timetableId = createResult.timetableId,
+                        totalWeeks = totalWeeks,
+                        maxPeriod = maxPeriod,
+                        rawCsv = rawCsv
+                    )
+
+                    _uiState.update {
+                        it.copy(
+                            isSaving = false,
+                            isCsvBusy = false,
+                            message = buildString {
+                                append("导入完成：")
+                                append(report.importedCourseCount)
+                                append(" 门课程，")
+                                append(report.importedSessionCount)
+                                append(" 条课时")
+                                if (report.errors.isNotEmpty()) {
+                                    append("，")
+                                    append(report.errors.size)
+                                    append(" 行失败")
+                                }
+                            }
+                        )
+                    }
+                    _events.emit(TimetableEditorEvent.Saved)
+                }
+
+                is TimetableSaveResult.ValidationError -> {
+                    _uiState.update {
+                        it.copy(isSaving = false, isCsvBusy = false, message = createResult.message)
+                    }
+                }
+
+                TimetableSaveResult.NotFound -> {
+                    _uiState.update {
+                        it.copy(isSaving = false, isCsvBusy = false, message = "课程表不存在，可能已被删除")
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Exports all courses under the editing timetable to CSV and asks UI to save it.
+     */
+    fun exportCsvForEditingTimetable() {
+        if (timetableId == null) {
+            emitMessage("请先创建课程表后再导出 CSV")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCsvBusy = true) }
+            val csv = exportCsvUseCase(timetableId)
+            _uiState.update { it.copy(isCsvBusy = false) }
+            _events.emit(
+                TimetableEditorEvent.ExportCsvReady(
+                    fileName = "sleepin_courses_${timetableId}_${System.currentTimeMillis()}.csv",
+                    content = csv
+                )
+            )
+        }
     }
 
     /**
@@ -202,9 +326,12 @@ class TimetableEditorViewModel(
         fun factory(
             timetableId: Long?,
             getSchedulesUseCase: GetSchedulesUseCase,
+            getScheduleDetailUseCase: GetScheduleDetailUseCase,
             getTimetableDetailUseCase: GetTimetableDetailUseCase,
             createTimetableUseCase: CreateTimetableUseCase,
-            updateTimetableUseCase: UpdateTimetableUseCase
+            updateTimetableUseCase: UpdateTimetableUseCase,
+            importCsvUseCase: ImportCsvUseCase,
+            exportCsvUseCase: ExportCsvUseCase
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -212,9 +339,12 @@ class TimetableEditorViewModel(
                     return TimetableEditorViewModel(
                         timetableId = timetableId,
                         getSchedulesUseCase = getSchedulesUseCase,
+                        getScheduleDetailUseCase = getScheduleDetailUseCase,
                         getTimetableDetailUseCase = getTimetableDetailUseCase,
                         createTimetableUseCase = createTimetableUseCase,
-                        updateTimetableUseCase = updateTimetableUseCase
+                        updateTimetableUseCase = updateTimetableUseCase,
+                        importCsvUseCase = importCsvUseCase,
+                        exportCsvUseCase = exportCsvUseCase
                     ) as T
                 }
             }

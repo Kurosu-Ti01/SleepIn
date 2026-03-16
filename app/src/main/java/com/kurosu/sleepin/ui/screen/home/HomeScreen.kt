@@ -44,6 +44,7 @@ fun HomeScreen(
     onTimetableListClick: () -> Unit,
     onScheduleListClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    courseRowHeightDp: Int,
     viewModel: HomeViewModel
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -151,6 +152,7 @@ fun HomeScreen(
                                 onSwipeToNextWeek = {
                                     viewModel.onWeekChanged(uiState.selectedWeek + 1)
                                 },
+                                rowHeight = courseRowHeightDp.dp,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

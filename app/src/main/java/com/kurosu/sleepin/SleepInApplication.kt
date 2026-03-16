@@ -1,6 +1,7 @@
 package com.kurosu.sleepin
 
 import android.app.Application
+import com.kurosu.sleepin.data.preferences.settingsDataStore
 import com.kurosu.sleepin.di.DatabaseModule
 import com.kurosu.sleepin.di.RepositoryModule
 import com.kurosu.sleepin.domain.usecase.schedule.DeleteScheduleUseCase
@@ -22,6 +23,12 @@ import com.kurosu.sleepin.domain.usecase.timetable.GetTimetableDetailUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.GetTimetablesUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.SetActiveTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase
+import com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
+import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
+import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
+import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
+import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
+import com.kurosu.sleepin.domain.usecase.settings.UpdateSettingsUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -74,6 +81,20 @@ class SleepInApplication : Application() {
     lateinit var setActiveTimetableUseCase: SetActiveTimetableUseCase
         private set
 
+    lateinit var observeSettingsUseCase: ObserveSettingsUseCase
+        private set
+    lateinit var updateSettingsUseCase: UpdateSettingsUseCase
+        private set
+    lateinit var exportSettingsBackupUseCase: ExportSettingsBackupUseCase
+        private set
+    lateinit var importSettingsBackupUseCase: ImportSettingsBackupUseCase
+        private set
+
+    lateinit var importCsvUseCase: ImportCsvUseCase
+        private set
+    lateinit var exportCsvUseCase: ExportCsvUseCase
+        private set
+
     private lateinit var seedDefaultScheduleUseCase: SeedDefaultScheduleUseCase
 
     // Dedicated app scope for lightweight startup tasks.
@@ -92,6 +113,9 @@ class SleepInApplication : Application() {
         val timetableRepository = RepositoryModule.provideTimetableRepository(database)
         val courseRepository = RepositoryModule.provideCourseRepository(database)
         val checkConflictUseCase = CheckConflictUseCase(courseRepository)
+        val settingsRepository = RepositoryModule.provideSettingsRepository(settingsDataStore)
+        val csvImporter = RepositoryModule.provideCsvImporter()
+        val csvExporter = RepositoryModule.provideCsvExporter()
 
         getSchedulesUseCase = GetSchedulesUseCase(scheduleRepository)
         getScheduleDetailUseCase = GetScheduleDetailUseCase(scheduleRepository)
@@ -113,6 +137,14 @@ class SleepInApplication : Application() {
         updateTimetableUseCase = UpdateTimetableUseCase(timetableRepository)
         deleteTimetableUseCase = DeleteTimetableUseCase(timetableRepository)
         setActiveTimetableUseCase = SetActiveTimetableUseCase(timetableRepository)
+
+        observeSettingsUseCase = ObserveSettingsUseCase(settingsRepository)
+        updateSettingsUseCase = UpdateSettingsUseCase(settingsRepository)
+        exportSettingsBackupUseCase = ExportSettingsBackupUseCase(settingsRepository)
+        importSettingsBackupUseCase = ImportSettingsBackupUseCase(settingsRepository)
+
+        importCsvUseCase = ImportCsvUseCase(csvImporter, courseRepository)
+        exportCsvUseCase = ExportCsvUseCase(courseRepository, csvExporter)
     }
 
     /**

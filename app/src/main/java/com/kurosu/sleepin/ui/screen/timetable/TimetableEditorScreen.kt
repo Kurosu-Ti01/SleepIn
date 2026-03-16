@@ -1,5 +1,9 @@
 package com.kurosu.sleepin.ui.screen.timetable
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -49,13 +54,42 @@ fun TimetableEditorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
     var scheduleExpanded by remember { mutableStateOf(false) }
+    var pendingExportText by remember { mutableStateOf<String?>(null) }
+
+    // CSV import picker is used only in create mode. The selected file is read as UTF-8 text
+    // and delegated to ViewModel so domain-level parser/validator remains centralized.
+    val importCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        val text = uri?.let { context.readTextFromUri(it) }
+        if (!text.isNullOrBlank()) {
+            viewModel.createAndImportCsv(text)
+        }
+    }
+
+    // CSV export requires a writeable document Uri chosen by user. We keep pending content in
+    // memory between ViewModel event emission and document creation callback.
+    val exportCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        val pending = pendingExportText
+        if (uri != null && pending != null) {
+            context.writeTextToUri(uri, pending)
+        }
+        pendingExportText = null
+    }
 
     // Close editor only when ViewModel confirms save succeeded.
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
-            if (event is TimetableEditorEvent.Saved) {
-                onBackClick()
+            when (event) {
+                TimetableEditorEvent.Saved -> onBackClick()
+                is TimetableEditorEvent.ExportCsvReady -> {
+                    pendingExportText = event.content
+                    exportCsvLauncher.launch(event.fileName)
+                }
             }
         }
     }
@@ -77,6 +111,14 @@ fun TimetableEditorScreen(
                     }
                 },
                 actions = {
+                    if (uiState.isEditMode) {
+                        TextButton(
+                            onClick = viewModel::exportCsvForEditingTimetable,
+                            enabled = !uiState.isSaving && !uiState.isCsvBusy
+                        ) {
+                            Text(if (uiState.isCsvBusy) "导出中..." else "导出CSV")
+                        }
+                    }
                     TextButton(onClick = viewModel::save, enabled = !uiState.isSaving) {
                         Text(if (uiState.isSaving) "保存中..." else "保存")
                     }
@@ -199,9 +241,29 @@ fun TimetableEditorScreen(
                 Button(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = viewModel::save,
-                    enabled = !uiState.isSaving
+                    enabled = !uiState.isSaving && !uiState.isCsvBusy
                 ) {
                     Text(if (uiState.isSaving) "保存中..." else "保存课程表")
+                }
+            }
+
+            item {
+                if (uiState.isEditMode) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = viewModel::exportCsvForEditingTimetable,
+                        enabled = !uiState.isSaving && !uiState.isCsvBusy
+                    ) {
+                        Text(if (uiState.isCsvBusy) "导出中..." else "导出当前课程表CSV")
+                    }
+                } else {
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { importCsvLauncher.launch(arrayOf("text/csv", "text/*")) },
+                        enabled = !uiState.isSaving && !uiState.isCsvBusy
+                    ) {
+                        Text(if (uiState.isCsvBusy) "导入中..." else "保存并导入CSV")
+                    }
                 }
             }
         }
@@ -215,17 +277,38 @@ fun TimetableEditorScreen(
 fun rememberTimetableEditorViewModel(
     timetableId: Long?,
     getSchedulesUseCase: com.kurosu.sleepin.domain.usecase.schedule.GetSchedulesUseCase,
+    getScheduleDetailUseCase: com.kurosu.sleepin.domain.usecase.schedule.GetScheduleDetailUseCase,
     getTimetableDetailUseCase: com.kurosu.sleepin.domain.usecase.timetable.GetTimetableDetailUseCase,
     createTimetableUseCase: com.kurosu.sleepin.domain.usecase.timetable.CreateTimetableUseCase,
-    updateTimetableUseCase: com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase
+    updateTimetableUseCase: com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase,
+    importCsvUseCase: com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase,
+    exportCsvUseCase: com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
 ): TimetableEditorViewModel = viewModel(
     factory = TimetableEditorViewModel.factory(
         timetableId = timetableId,
         getSchedulesUseCase = getSchedulesUseCase,
+        getScheduleDetailUseCase = getScheduleDetailUseCase,
         getTimetableDetailUseCase = getTimetableDetailUseCase,
         createTimetableUseCase = createTimetableUseCase,
-        updateTimetableUseCase = updateTimetableUseCase
+        updateTimetableUseCase = updateTimetableUseCase,
+        importCsvUseCase = importCsvUseCase,
+        exportCsvUseCase = exportCsvUseCase
     )
 )
+
+/**
+ * Reads UTF-8 text from a Storage Access Framework Uri.
+ */
+private fun Context.readTextFromUri(uri: Uri): String? =
+    contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+
+/**
+ * Writes UTF-8 text to a Storage Access Framework Uri.
+ */
+private fun Context.writeTextToUri(uri: Uri, content: String) {
+    contentResolver.openOutputStream(uri, "w")?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+        writer.write(content)
+    }
+}
 
 
