@@ -12,6 +12,13 @@ import com.kurosu.sleepin.domain.usecase.csv.CsvRowError
  */
 class CsvImporter {
 
+    private data class WeekParseResult(
+        val weekType: WeekType,
+        val startWeek: Int?,
+        val endWeek: Int?,
+        val customWeeks: List<Int>
+    )
+
     data class ParseResult(
         val rows: List<CsvCourseRow>,
         val errors: List<CsvRowError>
@@ -92,16 +99,149 @@ class CsvImporter {
             throw IllegalArgumentException("Period range must be within 1-$maxPeriod and start <= end")
         }
 
-        val weekTypeRaw = value("周数类型", "WeekType").uppercase()
+        val hasWeeksColumn = headerMap.containsKey("周次") || headerMap.containsKey("Weeks")
+        val weekParseResult = if (hasWeeksColumn) {
+            parseWeeksSpec(
+                spec = value("周次", "Weeks"),
+                totalWeeks = totalWeeks,
+                rowNumber = rowNumber
+            )
+        } else {
+            // Keep backward compatibility with older exported files during migration.
+            parseLegacyWeekColumns(
+                weekTypeRaw = value("周数类型", "WeekType"),
+                startWeekRaw = value("起始周", "StartWeek"),
+                endWeekRaw = value("结束周", "EndWeek"),
+                customWeeksRaw = value("自定义周", "CustomWeeks"),
+                totalWeeks = totalWeeks
+            )
+        }
+
+        return CsvCourseRow(
+            name = name,
+            teacher = teacher,
+            location = location,
+            dayOfWeek = dayOfWeek,
+            startPeriod = startPeriod,
+            endPeriod = endPeriod,
+            weekType = weekParseResult.weekType,
+            startWeek = weekParseResult.startWeek,
+            endWeek = weekParseResult.endWeek,
+            customWeeks = weekParseResult.customWeeks
+        )
+    }
+
+    /**
+     * Parses the new single-column week syntax.
+     *
+     * Supported forms:
+     * - 1-16
+     * - 1;3;5;7;8
+     * - 1-16(odd) / 1-16(even)
+     * - 1-4;7-9;13;14-18(odd)
+     */
+    private fun parseWeeksSpec(spec: String, totalWeeks: Int, rowNumber: Int): WeekParseResult {
+        val normalized = spec.trim()
+        if (normalized.isEmpty()) {
+            throw IllegalArgumentException("Weeks cannot be empty")
+        }
+
+        // Preserve a direct ALL fallback so manually-authored CSV can still express this intent.
+        if (normalized.equals("ALL", ignoreCase = true)) {
+            return WeekParseResult(weekType = WeekType.ALL, startWeek = null, endWeek = null, customWeeks = emptyList())
+        }
+
+        val rangePattern = Regex("^\\s*(\\d+)\\s*-\\s*(\\d+)\\s*$")
+        val parityRangePattern = Regex("^\\s*(\\d+)\\s*-\\s*(\\d+)\\s*\\((odd|even)\\)\\s*$", RegexOption.IGNORE_CASE)
+        val singleWeekPattern = Regex("^\\s*(\\d+)\\s*$")
+
+        if (!normalized.contains(';')) {
+            val rangeMatch = rangePattern.matchEntire(normalized)
+            if (rangeMatch != null) {
+                val startWeek = rangeMatch.groupValues[1].toInt()
+                val endWeek = rangeMatch.groupValues[2].toInt()
+                validateRange(startWeek = startWeek, endWeek = endWeek, totalWeeks = totalWeeks)
+                return WeekParseResult(
+                    weekType = WeekType.RANGE,
+                    startWeek = startWeek,
+                    endWeek = endWeek,
+                    customWeeks = emptyList()
+                )
+            }
+        }
+
+        val expandedWeeks = mutableSetOf<Int>()
+        normalized
+            .split(';')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .forEach { token ->
+                val parityRangeMatch = parityRangePattern.matchEntire(token)
+                if (parityRangeMatch != null) {
+                    val startWeek = parityRangeMatch.groupValues[1].toInt()
+                    val endWeek = parityRangeMatch.groupValues[2].toInt()
+                    val parity = parityRangeMatch.groupValues[3].lowercase()
+                    validateRange(startWeek = startWeek, endWeek = endWeek, totalWeeks = totalWeeks)
+
+                    (startWeek..endWeek)
+                        .filter { week -> (parity == "odd" && week % 2 == 1) || (parity == "even" && week % 2 == 0) }
+                        .forEach(expandedWeeks::add)
+                    return@forEach
+                }
+
+                val plainRangeMatch = rangePattern.matchEntire(token)
+                if (plainRangeMatch != null) {
+                    val startWeek = plainRangeMatch.groupValues[1].toInt()
+                    val endWeek = plainRangeMatch.groupValues[2].toInt()
+                    validateRange(startWeek = startWeek, endWeek = endWeek, totalWeeks = totalWeeks)
+                    (startWeek..endWeek).forEach(expandedWeeks::add)
+                    return@forEach
+                }
+
+                val singleWeekMatch = singleWeekPattern.matchEntire(token)
+                if (singleWeekMatch != null) {
+                    val week = singleWeekMatch.groupValues[1].toInt()
+                    if (week !in 1..totalWeeks) {
+                        throw IllegalArgumentException("Week $week is out of range 1-$totalWeeks")
+                    }
+                    expandedWeeks.add(week)
+                    return@forEach
+                }
+
+                throw IllegalArgumentException("Invalid weeks token '$token' at row $rowNumber")
+            }
+
+        if (expandedWeeks.isEmpty()) {
+            throw IllegalArgumentException("Weeks cannot be empty")
+        }
+
+        return WeekParseResult(
+            weekType = WeekType.CUSTOM,
+            startWeek = null,
+            endWeek = null,
+            customWeeks = expandedWeeks.sorted()
+        )
+    }
+
+    /**
+     * Parses the legacy four-column week representation used by older CSV exports.
+     */
+    private fun parseLegacyWeekColumns(
+        weekTypeRaw: String,
+        startWeekRaw: String,
+        endWeekRaw: String,
+        customWeeksRaw: String,
+        totalWeeks: Int
+    ): WeekParseResult {
         val weekType = try {
-            WeekType.valueOf(weekTypeRaw)
+            WeekType.valueOf(weekTypeRaw.uppercase())
         } catch (_: IllegalArgumentException) {
             throw IllegalArgumentException("Week type must be ALL, RANGE, or CUSTOM")
         }
 
-        val startWeekValue = value("起始周", "StartWeek").toIntOrNull()
-        val endWeekValue = value("结束周", "EndWeek").toIntOrNull()
-        val customWeeks = value("自定义周", "CustomWeeks")
+        val startWeekValue = startWeekRaw.toIntOrNull()
+        val endWeekValue = endWeekRaw.toIntOrNull()
+        val customWeeks = customWeeksRaw
             .split(';')
             .mapNotNull { token -> token.trim().takeIf { it.isNotEmpty() }?.toIntOrNull() }
             .distinct()
@@ -112,9 +252,7 @@ class CsvImporter {
             WeekType.RANGE -> {
                 val startWeek = startWeekValue ?: throw IllegalArgumentException("Start week is required for RANGE")
                 val endWeek = endWeekValue ?: throw IllegalArgumentException("End week is required for RANGE")
-                if (startWeek !in 1..totalWeeks || endWeek !in 1..totalWeeks || startWeek > endWeek) {
-                    throw IllegalArgumentException("Week range must be between 1 and $totalWeeks")
-                }
+                validateRange(startWeek = startWeek, endWeek = endWeek, totalWeeks = totalWeeks)
             }
             WeekType.CUSTOM -> {
                 if (customWeeks.isEmpty()) throw IllegalArgumentException("Custom weeks cannot be empty for CUSTOM")
@@ -124,18 +262,19 @@ class CsvImporter {
             }
         }
 
-        return CsvCourseRow(
-            name = name,
-            teacher = teacher,
-            location = location,
-            dayOfWeek = dayOfWeek,
-            startPeriod = startPeriod,
-            endPeriod = endPeriod,
+        return WeekParseResult(
             weekType = weekType,
             startWeek = startWeekValue,
             endWeek = endWeekValue,
             customWeeks = customWeeks
         )
     }
+
+    private fun validateRange(startWeek: Int, endWeek: Int, totalWeeks: Int) {
+        if (startWeek !in 1..totalWeeks || endWeek !in 1..totalWeeks || startWeek > endWeek) {
+            throw IllegalArgumentException("Week range must be between 1 and $totalWeeks")
+        }
+    }
+
 }
 

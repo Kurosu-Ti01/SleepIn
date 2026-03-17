@@ -43,10 +43,10 @@ class CsvExporterTest {
             )
         )
 
-        val csv = exporter.export(listOf(aggregate))
+        val csv = exporter.export(courses = listOf(aggregate), totalWeeks = 18)
 
         assertTrue(csv.startsWith("\uFEFF课程名称,教师,地点"))
-        assertTrue(csv.contains("高等数学,张三,A101,1,1,2,RANGE,1,16,"))
+        assertTrue(csv.contains("高等数学,张三,A101,1,1,2,1-16"))
     }
 }
 

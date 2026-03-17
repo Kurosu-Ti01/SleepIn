@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -101,6 +102,19 @@ fun TimetableEditorScreen(
         viewModel.consumeMessage()
     }
 
+    uiState.csvImportErrorDetail?.let { detail ->
+        AlertDialog(
+            onDismissRequest = viewModel::consumeCsvImportErrorDetail,
+            title = { Text("CSV 导入错误详情") },
+            text = { Text(detail) },
+            confirmButton = {
+                TextButton(onClick = viewModel::consumeCsvImportErrorDetail) {
+                    Text("我知道了")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -162,7 +176,7 @@ fun TimetableEditorScreen(
                     value = uiState.totalWeeks,
                     onValueChange = viewModel::onTotalWeeksChange,
                     label = { Text("总周数 (1-30)") },
-                    placeholder = { Text("18") },
+                    placeholder = { Text("16") },
                     singleLine = true
                 )
             }
@@ -280,6 +294,7 @@ fun rememberTimetableEditorViewModel(
     getScheduleDetailUseCase: com.kurosu.sleepin.domain.usecase.schedule.GetScheduleDetailUseCase,
     getTimetableDetailUseCase: com.kurosu.sleepin.domain.usecase.timetable.GetTimetableDetailUseCase,
     createTimetableUseCase: com.kurosu.sleepin.domain.usecase.timetable.CreateTimetableUseCase,
+    deleteTimetableUseCase: com.kurosu.sleepin.domain.usecase.timetable.DeleteTimetableUseCase,
     updateTimetableUseCase: com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase,
     importCsvUseCase: com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase,
     exportCsvUseCase: com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
@@ -290,6 +305,7 @@ fun rememberTimetableEditorViewModel(
         getScheduleDetailUseCase = getScheduleDetailUseCase,
         getTimetableDetailUseCase = getTimetableDetailUseCase,
         createTimetableUseCase = createTimetableUseCase,
+        deleteTimetableUseCase = deleteTimetableUseCase,
         updateTimetableUseCase = updateTimetableUseCase,
         importCsvUseCase = importCsvUseCase,
         exportCsvUseCase = exportCsvUseCase

@@ -165,6 +165,7 @@ fun SleepInNavHost(
                 getScheduleDetailUseCase = app.getScheduleDetailUseCase,
                 getTimetableDetailUseCase = app.getTimetableDetailUseCase,
                 createTimetableUseCase = app.createTimetableUseCase,
+                deleteTimetableUseCase = app.deleteTimetableUseCase,
                 updateTimetableUseCase = app.updateTimetableUseCase,
                 importCsvUseCase = app.importCsvUseCase,
                 exportCsvUseCase = app.exportCsvUseCase

@@ -8,6 +8,7 @@ import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleDetailUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetSchedulesUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.CreateTimetableUseCase
+import com.kurosu.sleepin.domain.usecase.timetable.DeleteTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.GetTimetableDetailUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.TimetableSaveResult
 import com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase
@@ -37,12 +38,13 @@ data class TimetableEditorUiState(
     val isSaving: Boolean = false,
     val isCsvBusy: Boolean = false,
     val name: String = "",
-    val totalWeeks: String = "18",
+    val totalWeeks: String = "16",
     val startDateText: String = LocalDate.now().toString(),
     val colorScheme: String = "",
     val scheduleOptions: List<ScheduleOptionUi> = emptyList(),
     val selectedScheduleId: Long? = null,
     val message: String? = null,
+    val csvImportErrorDetail: String? = null,
     val isEditMode: Boolean = false
 )
 
@@ -68,6 +70,7 @@ class TimetableEditorViewModel(
     private val getScheduleDetailUseCase: GetScheduleDetailUseCase,
     private val getTimetableDetailUseCase: GetTimetableDetailUseCase,
     private val createTimetableUseCase: CreateTimetableUseCase,
+    private val deleteTimetableUseCase: DeleteTimetableUseCase,
     private val updateTimetableUseCase: UpdateTimetableUseCase,
     private val importCsvUseCase: ImportCsvUseCase,
     private val exportCsvUseCase: ExportCsvUseCase
@@ -88,6 +91,10 @@ class TimetableEditorViewModel(
 
     fun consumeMessage() {
         _uiState.update { it.copy(message = null) }
+    }
+
+    fun consumeCsvImportErrorDetail() {
+        _uiState.update { it.copy(csvImportErrorDetail = null) }
     }
 
     fun onNameChange(value: String) {
@@ -168,25 +175,40 @@ class TimetableEditorViewModel(
                         rawCsv = rawCsv
                     )
 
+                    // Avoid leaving a meaningless empty timetable when import produced no sessions.
+                    if (report.importedSessionCount == 0) {
+                        deleteTimetableUseCase(createResult.timetableId)
+                    }
+
+                    val isEmptyImport = report.importedSessionCount == 0
+
                     _uiState.update {
                         it.copy(
                             isSaving = false,
                             isCsvBusy = false,
-                            message = buildString {
-                                append("导入完成：")
-                                append(report.importedCourseCount)
-                                append(" 门课程，")
-                                append(report.importedSessionCount)
-                                append(" 条课时")
-                                if (report.errors.isNotEmpty()) {
-                                    append("，")
-                                    append(report.errors.size)
-                                    append(" 行失败")
+                            message = if (isEmptyImport) {
+                                "未导入任何课时，已取消创建课程表"
+                            } else {
+                                buildString {
+                                    append("导入完成：")
+                                    append(report.importedCourseCount)
+                                    append(" 门课程，")
+                                    append(report.importedSessionCount)
+                                    append(" 条课时")
+                                    if (report.errors.isNotEmpty()) {
+                                        append("，")
+                                        append(report.errors.size)
+                                        append(" 行失败")
+                                    }
                                 }
-                            }
+                            },
+                            csvImportErrorDetail = buildCsvImportErrorDetail(report)
                         )
                     }
-                    _events.emit(TimetableEditorEvent.Saved)
+                    // Keep user on this page when any row fails so the detail dialog can be read.
+                    if (!isEmptyImport && report.errors.isEmpty()) {
+                        _events.emit(TimetableEditorEvent.Saved)
+                    }
                 }
 
                 is TimetableSaveResult.ValidationError -> {
@@ -321,6 +343,23 @@ class TimetableEditorViewModel(
         _uiState.update { it.copy(message = message) }
     }
 
+    /**
+     * Builds a multi-line error report so users can quickly locate malformed CSV rows.
+     */
+    private fun buildCsvImportErrorDetail(report: com.kurosu.sleepin.domain.usecase.csv.CsvImportReport): String? {
+        if (report.errors.isEmpty()) return null
+        return buildString {
+            append("导入遇到错误，请检查以下行：\n\n")
+            report.errors.forEach { error ->
+                append("第 ")
+                append(error.rowNumber)
+                append(" 行：")
+                append(error.message)
+                append('\n')
+            }
+        }.trimEnd()
+    }
+
     companion object {
         /** Manual factory mirrors current non-Hilt architecture used across the app. */
         fun factory(
@@ -329,6 +368,7 @@ class TimetableEditorViewModel(
             getScheduleDetailUseCase: GetScheduleDetailUseCase,
             getTimetableDetailUseCase: GetTimetableDetailUseCase,
             createTimetableUseCase: CreateTimetableUseCase,
+            deleteTimetableUseCase: DeleteTimetableUseCase,
             updateTimetableUseCase: UpdateTimetableUseCase,
             importCsvUseCase: ImportCsvUseCase,
             exportCsvUseCase: ExportCsvUseCase
@@ -342,6 +382,7 @@ class TimetableEditorViewModel(
                         getScheduleDetailUseCase = getScheduleDetailUseCase,
                         getTimetableDetailUseCase = getTimetableDetailUseCase,
                         createTimetableUseCase = createTimetableUseCase,
+                        deleteTimetableUseCase = deleteTimetableUseCase,
                         updateTimetableUseCase = updateTimetableUseCase,
                         importCsvUseCase = importCsvUseCase,
                         exportCsvUseCase = exportCsvUseCase

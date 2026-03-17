@@ -40,9 +40,9 @@ data class ScheduleEditorUiState(
     ),
     // Fields used by the quick generation tool.
     val quickStartTime: String = "08:00",
-    val quickClassDurationMinutes: String = "45",
+    val quickClassDurationMinutes: String = "50",
     val quickBreakMinutes: String = "10",
-    val quickPeriodCount: String = "12",
+    val quickPeriodCount: String = "10",
     // One-shot message consumed by the screen snackbar.
     val message: String? = null
 )

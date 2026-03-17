@@ -144,7 +144,7 @@ class SleepInApplication : Application() {
         importSettingsBackupUseCase = ImportSettingsBackupUseCase(settingsRepository)
 
         importCsvUseCase = ImportCsvUseCase(csvImporter, courseRepository)
-        exportCsvUseCase = ExportCsvUseCase(courseRepository, csvExporter)
+        exportCsvUseCase = ExportCsvUseCase(courseRepository, timetableRepository, csvExporter)
     }
 
     /**
