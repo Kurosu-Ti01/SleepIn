@@ -1,9 +1,11 @@
 package com.kurosu.sleepin
 
 import android.app.Application
+import androidx.room.InvalidationTracker
 import com.kurosu.sleepin.data.preferences.settingsDataStore
 import com.kurosu.sleepin.di.DatabaseModule
 import com.kurosu.sleepin.di.RepositoryModule
+import com.kurosu.sleepin.data.local.SleepInDatabase
 import com.kurosu.sleepin.domain.usecase.schedule.DeleteScheduleUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleDetailUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleUsageCountUseCase
@@ -29,6 +31,7 @@ import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
 import com.kurosu.sleepin.domain.usecase.settings.UpdateSettingsUseCase
+import com.kurosu.sleepin.widget.WidgetRefreshScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +45,8 @@ import kotlinx.coroutines.launch
  * - Keeping them in `Application` provides a simple app-wide graph without static globals.
  */
 class SleepInApplication : Application() {
+
+    private lateinit var database: SleepInDatabase
 
     // Public read-only handles consumed by navigation + ViewModel factories.
     lateinit var getSchedulesUseCase: GetSchedulesUseCase
@@ -104,11 +109,13 @@ class SleepInApplication : Application() {
         super.onCreate()
         initGraph()
         seedDefaultSchedule()
+        scheduleWidgetRefreshPipeline()
+        registerWidgetRefreshOnDatabaseChanges()
     }
 
     /** Builds the small dependency graph needed by the schedule module. */
     private fun initGraph() {
-        val database = DatabaseModule.provideDatabase(this)
+        database = DatabaseModule.provideDatabase(this)
         val scheduleRepository = RepositoryModule.provideScheduleRepository(database)
         val timetableRepository = RepositoryModule.provideTimetableRepository(database)
         val courseRepository = RepositoryModule.provideCourseRepository(database)
@@ -145,6 +152,35 @@ class SleepInApplication : Application() {
 
         importCsvUseCase = ImportCsvUseCase(csvImporter, courseRepository)
         exportCsvUseCase = ExportCsvUseCase(courseRepository, timetableRepository, csvExporter)
+    }
+
+    /**
+     * Sets up periodic refresh so widgets keep updating even when no app screen is open.
+     */
+    private fun scheduleWidgetRefreshPipeline() {
+        WidgetRefreshScheduler.schedulePeriodic(this)
+        WidgetRefreshScheduler.requestImmediateUpdate(this)
+    }
+
+    /**
+     * Subscribes to Room invalidation callbacks and requests immediate widget refreshes.
+     *
+     * This keeps widget data fresh after any repository write without touching repository code.
+     */
+    private fun registerWidgetRefreshOnDatabaseChanges() {
+        database.invalidationTracker.addObserver(
+            object : InvalidationTracker.Observer(
+                "timetables",
+                "courses",
+                "course_sessions",
+                "schedules",
+                "schedule_periods"
+            ) {
+                override fun onInvalidated(tables: Set<String>) {
+                    WidgetRefreshScheduler.requestImmediateUpdate(this@SleepInApplication)
+                }
+            }
+        )
     }
 
     /**

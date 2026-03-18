@@ -1,0 +1,9 @@
+<resources>
+    <!-- Minimum cell sizes for app widget picker previews. -->
+    <dimen name="widget_today_min_width">180dp</dimen>
+    <dimen name="widget_today_min_height">110dp</dimen>
+
+    <dimen name="widget_week_min_width">220dp</dimen>
+    <dimen name="widget_week_min_height">180dp</dimen>
+</resources>
+
