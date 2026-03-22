@@ -16,7 +16,12 @@ import com.kurosu.sleepin.data.local.entity.SchedulePeriodEntity
 import com.kurosu.sleepin.data.local.entity.TimetableEntity
 
 /**
- * Main Room database for all local persistence tables.
+ * Main Room database for SleepIn app.
+ *
+ * This database uses Room to provide local persistence. It registers all standard entities
+ * required by the app, and delegates standard database operations to corresponding DAOs.
+ * It also registers [Converters] to handle custom data types like `LocalDate` or custom ENUMs
+ * seamlessly when interacting with the SQLite database.
  */
 @Database(
     entities = [

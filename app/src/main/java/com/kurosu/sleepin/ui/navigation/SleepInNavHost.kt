@@ -30,7 +30,7 @@ import com.kurosu.sleepin.ui.screen.timetable.rememberTimetableEditorViewModel
 /**
  * App-level navigation graph for all top-level screens.
  *
- * DI is still manual in this phase, so this graph obtains use cases from [SleepInApplication]
+ * DI is manual, so this graph obtains use cases from [SleepInApplication]
  * and passes them into ViewModel factories.
  */
 @Composable

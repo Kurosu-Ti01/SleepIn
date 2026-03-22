@@ -16,6 +16,17 @@ class WidgetRefreshWorker(
     workerParameters: WorkerParameters
 ) : CoroutineWorker(context, workerParameters) {
 
+    /**
+     * Executes one refresh cycle for all widget variants.
+     *
+     * Side effects:
+     * - Triggers Glance recomposition for Today and Week widgets.
+     * - Causes each widget to re-run its snapshot loading pipeline.
+     *
+     * Retry policy:
+     * - Returns [Result.retry] on any exception so WorkManager can back off and try again,
+     *   which is safer than dropping refreshes silently.
+     */
     override suspend fun doWork(): Result {
         return runCatching {
             TodayWidget.updateAll(applicationContext)

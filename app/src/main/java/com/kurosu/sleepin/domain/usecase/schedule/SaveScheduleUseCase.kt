@@ -8,7 +8,7 @@ import java.time.LocalTime
 /**
  * Validates schedule editor input and persists schedule + periods as one logical action.
  *
- * This use case is intentionally strict because editor input is text-based in Phase 2.
+ * This use case is intentionally strict because editor input is text-based and prone to user format errors.
  * Every validation failure returns a user-facing message instead of throwing, so the
  * ViewModel can surface it through UI state.
  */
@@ -32,11 +32,18 @@ class SaveScheduleUseCase(
 
     /**
      * Persists a schedule and all period rows.
+     * 
+     * Validates individual schedule parameters and detailed period drafts. If successful, maps the 
+     * payload to [Schedule] and [SchedulePeriod] entities, and executes the save across database boundaries.
+     * 
+     * Side effects:
+     * - Inserts or updates entities using Room transactions via [repository] (IO-bound).
      *
      * @param scheduleId `null` when creating; non-null when editing.
-     * @param name schedule display name.
+     * @param name schedule display name. Must be non-blank.
      * @param createdAt original creation timestamp when editing; null for create.
-     * @param periods all rows that should exist after save (replace-all semantics).
+     * @param periods all rows that should exist after save (replace-all semantics). Must not be empty.
+     * @return Result of the schedule creation, returning [SaveScheduleResult.Success] containing the schedule primary key, or [SaveScheduleResult.ValidationError].
      */
     suspend operator fun invoke(
         scheduleId: Long?,

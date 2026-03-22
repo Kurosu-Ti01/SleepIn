@@ -42,6 +42,12 @@ class WeekWidgetReceiver : GlanceAppWidgetReceiver() {
  * Widget that shows a compact summary for each weekday in the selected semester week.
  */
 object WeekWidget : GlanceAppWidget() {
+    /**
+     * Glance entrypoint for week-summary rendering.
+     *
+     * The host process may call this at any time (placement, resize, periodic refresh),
+     * so this function always rebuilds snapshot data from use cases instead of caching UI state.
+     */
     override suspend fun provideGlance(context: android.content.Context, id: GlanceId) {
         val app = context.applicationContext as SleepInApplication
         val snapshot = WidgetCourseSnapshotProvider(app).load()

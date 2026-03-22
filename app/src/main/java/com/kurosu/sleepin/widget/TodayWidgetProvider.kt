@@ -47,6 +47,14 @@ class TodayWidgetReceiver : GlanceAppWidgetReceiver() {
  */
 object TodayWidget : GlanceAppWidget() {
 
+    /**
+     * Glance entrypoint invoked by launcher/host when this widget needs rendering.
+     *
+     * Data flow:
+     * - Reads app-level dependencies from [SleepInApplication].
+     * - Builds one [WidgetSnapshot] via [WidgetCourseSnapshotProvider].
+     * - Passes immutable snapshot data to Compose-style widget content.
+     */
     override suspend fun provideGlance(context: android.content.Context, id: GlanceId) {
         val app = context.applicationContext as SleepInApplication
         val snapshot = WidgetCourseSnapshotProvider(app).load()
