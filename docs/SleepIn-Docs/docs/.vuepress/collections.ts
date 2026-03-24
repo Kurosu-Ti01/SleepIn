@@ -6,42 +6,12 @@ const zhDevDoc = defineCollection({
   linkPrefix: '/dev',
   title: '开发者文档',
   sidebar: [
-    {
-      text: '1. 新手起步',
-      items: [
-        { text: '开发者学习路线 (Start Here)', link: '/dev/README.md' },
-        { text: '环境搭建与本地构建', link: '/dev/build-debug-windows.md' }
+      {text: '从这里开始', link: '/dev/start-here.md' },
+      {text: '1. 编译构建', prefix: '1.build-debug', items: 'auto' },
+      {text: '2. 项目架构', prefix: '2.architecture', items: 'auto' },
+      {text: '3. 核心模块', prefix: '3.business', items: 'auto' },
+      {text: '4. 其他东西', prefix: '4.others', items: 'auto' },
       ]
-    },
-    {
-      text: '2. 整体架构 (Architecture)',
-      items: [
-        { text: '架构总览', link: '/dev/architecture/README.md' },
-        { text: '模块隔离与职责边界', link: '/dev/module-responsibilities.md' }
-      ]
-    },
-    {
-      text: '3. 核心分层剖析',
-      items: [
-        { text: 'Data 层：实体与 Room', link: '/dev/data-model-room.md' },
-        { text: 'Domain 层：UseCase 与逻辑', link: '/dev/business/usecase-chain.md' },
-        { text: 'UI 层：状态流(StateFlow)与纯 UI', link: '/dev/ui-viewmodel-compose.md' }
-      ]
-    },
-    {
-      text: '4. 专项功能实现',
-      items: [
-        { text: '文件 IO：CSV 导入流程', link: '/dev/business/csv-integration.md' },
-        { text: '小组件：Glance 与刷新队列', link: '/dev/widget-workmanager.md' }
-      ]
-    },
-    {
-      text: '5. 备忘与除错',
-      items: [
-        { text: '常见 Bug 与排障指南', link: '/dev/troubleshooting.md' }
-      ]
-    }
-  ]
 })
 
 const zhUserDoc = defineCollection({

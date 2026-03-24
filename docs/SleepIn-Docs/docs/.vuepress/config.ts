@@ -18,12 +18,12 @@ export default defineUserConfig({
   lang: 'zh-CN',
   locales: {
     '/': {
-      title: 'SleepIn-Docs',
+      title: 'SleepIn',
       lang: 'zh-CN',
       description: 'Docs for SleepIn',
     },
     '/en/': {
-      title: 'SleepIn-Docs',
+      title: 'SleepIn',
       lang: 'en-US',
       description: 'Docs for SleepIn',
     },
