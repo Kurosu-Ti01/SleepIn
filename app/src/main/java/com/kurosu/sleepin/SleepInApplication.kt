@@ -12,6 +12,8 @@ import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleUsageCountUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetSchedulesUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.SaveScheduleUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.SeedDefaultScheduleUseCase
+import com.kurosu.sleepin.domain.usecase.schedule.ImportScheduleCsvUseCase
+import com.kurosu.sleepin.domain.usecase.schedule.ExportScheduleCsvUseCase
 import com.kurosu.sleepin.domain.usecase.course.AddCourseUseCase
 import com.kurosu.sleepin.domain.usecase.course.CheckConflictUseCase
 import com.kurosu.sleepin.domain.usecase.course.DeleteCourseUseCase
@@ -58,6 +60,10 @@ class SleepInApplication : Application() {
     lateinit var saveScheduleUseCase: SaveScheduleUseCase
         private set
     lateinit var deleteScheduleUseCase: DeleteScheduleUseCase
+        private set
+    lateinit var importScheduleCsvUseCase: ImportScheduleCsvUseCase
+        private set
+    lateinit var exportScheduleCsvUseCase: ExportScheduleCsvUseCase
         private set
 
     lateinit var getCoursesForTimetableUseCase: GetCoursesForTimetableUseCase
@@ -123,6 +129,8 @@ class SleepInApplication : Application() {
         val settingsRepository = RepositoryModule.provideSettingsRepository(settingsDataStore)
         val csvImporter = RepositoryModule.provideCsvImporter()
         val csvExporter = RepositoryModule.provideCsvExporter()
+        val scheduleCsvImporter = RepositoryModule.provideScheduleCsvImporter()
+        val scheduleCsvExporter = RepositoryModule.provideScheduleCsvExporter()
 
         getSchedulesUseCase = GetSchedulesUseCase(scheduleRepository)
         getScheduleDetailUseCase = GetScheduleDetailUseCase(scheduleRepository)
@@ -130,6 +138,14 @@ class SleepInApplication : Application() {
         saveScheduleUseCase = SaveScheduleUseCase(scheduleRepository)
         deleteScheduleUseCase = DeleteScheduleUseCase(scheduleRepository)
         seedDefaultScheduleUseCase = SeedDefaultScheduleUseCase(scheduleRepository)
+        importScheduleCsvUseCase = ImportScheduleCsvUseCase(
+            importer = scheduleCsvImporter,
+            saveScheduleUseCase = saveScheduleUseCase
+        )
+        exportScheduleCsvUseCase = ExportScheduleCsvUseCase(
+            getScheduleDetailUseCase = getScheduleDetailUseCase,
+            exporter = scheduleCsvExporter
+        )
 
         getCoursesForTimetableUseCase = GetCoursesForTimetableUseCase(courseRepository)
         getCourseDetailUseCase = GetCourseDetailUseCase(courseRepository)

@@ -213,7 +213,9 @@ fun SleepInNavHost(
             val vm = com.kurosu.sleepin.ui.screen.schedule.rememberScheduleEditorViewModel(
                 scheduleId = scheduleId,
                 getScheduleDetailUseCase = app.getScheduleDetailUseCase,
-                saveScheduleUseCase = app.saveScheduleUseCase
+                saveScheduleUseCase = app.saveScheduleUseCase,
+                importScheduleCsvUseCase = app.importScheduleCsvUseCase,
+                exportScheduleCsvUseCase = app.exportScheduleCsvUseCase
             )
             ScheduleEditorScreen(
                 onBackClick = { navController.popBackStack() },

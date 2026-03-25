@@ -1,5 +1,9 @@
 package com.kurosu.sleepin.ui.screen.schedule
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,12 +29,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,12 +61,37 @@ fun ScheduleEditorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    var pendingExportText by remember { mutableStateOf<String?>(null) }
+
+    val importCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        val text = uri?.let { context.readTextFromUri(it) }
+        if (!text.isNullOrBlank()) {
+            viewModel.importCsvForCreate(text)
+        }
+    }
+
+    val exportCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        val pending = pendingExportText
+        if (uri != null && pending != null) {
+            context.writeTextToUri(uri, pending)
+        }
+        pendingExportText = null
+    }
 
     // Listen for one-time success events and leave the screen when save succeeds.
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
-            if (event is ScheduleEditorEvent.Saved) {
-                onBackClick()
+            when (event) {
+                ScheduleEditorEvent.Saved -> onBackClick()
+                is ScheduleEditorEvent.ExportCsvReady -> {
+                    pendingExportText = event.content
+                    exportCsvLauncher.launch(event.fileName)
+                }
             }
         }
     }
@@ -67,6 +101,19 @@ fun ScheduleEditorScreen(
         val message = uiState.message ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message)
         viewModel.consumeMessage()
+    }
+
+    uiState.csvImportErrorDetail?.let { detail ->
+        AlertDialog(
+            onDismissRequest = viewModel::consumeCsvImportErrorDetail,
+            title = { Text("CSV 导入错误详情") },
+            text = { Text(detail) },
+            confirmButton = {
+                TextButton(onClick = viewModel::consumeCsvImportErrorDetail) {
+                    Text("我知道了")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -214,9 +261,29 @@ fun ScheduleEditorScreen(
                 Button(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = viewModel::save,
-                    enabled = !uiState.isSaving
+                    enabled = !uiState.isSaving && !uiState.isCsvBusy
                 ) {
                     Text(if (uiState.isSaving) "保存中..." else "保存")
+                }
+            }
+
+            item {
+                if (uiState.isEditMode) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = viewModel::exportCsvForEditingSchedule,
+                        enabled = !uiState.isSaving && !uiState.isCsvBusy
+                    ) {
+                        Text(if (uiState.isCsvBusy) "导出中..." else "导出当前作息表CSV")
+                    }
+                } else {
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { importCsvLauncher.launch(arrayOf("text/csv", "text/*")) },
+                        enabled = !uiState.isSaving && !uiState.isCsvBusy
+                    ) {
+                        Text(if (uiState.isCsvBusy) "导入中..." else "导入CSV并创建作息表")
+                    }
                 }
             }
         }
@@ -230,11 +297,27 @@ fun ScheduleEditorScreen(
 fun rememberScheduleEditorViewModel(
     scheduleId: Long?,
     getScheduleDetailUseCase: com.kurosu.sleepin.domain.usecase.schedule.GetScheduleDetailUseCase,
-    saveScheduleUseCase: com.kurosu.sleepin.domain.usecase.schedule.SaveScheduleUseCase
+    saveScheduleUseCase: com.kurosu.sleepin.domain.usecase.schedule.SaveScheduleUseCase,
+    importScheduleCsvUseCase: com.kurosu.sleepin.domain.usecase.schedule.ImportScheduleCsvUseCase,
+    exportScheduleCsvUseCase: com.kurosu.sleepin.domain.usecase.schedule.ExportScheduleCsvUseCase
 ): ScheduleEditorViewModel = viewModel(
     factory = ScheduleEditorViewModel.factory(
         scheduleId = scheduleId,
         getScheduleDetailUseCase = getScheduleDetailUseCase,
-        saveScheduleUseCase = saveScheduleUseCase
+        saveScheduleUseCase = saveScheduleUseCase,
+        importScheduleCsvUseCase = importScheduleCsvUseCase,
+        exportScheduleCsvUseCase = exportScheduleCsvUseCase
     )
 )
+
+/** Reads UTF-8 text from a Storage Access Framework Uri. */
+private fun Context.readTextFromUri(uri: Uri): String? =
+    contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+
+/** Writes UTF-8 text to a Storage Access Framework Uri. */
+private fun Context.writeTextToUri(uri: Uri, content: String) {
+    contentResolver.openOutputStream(uri, "w")?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+        writer.write(content)
+    }
+}
+

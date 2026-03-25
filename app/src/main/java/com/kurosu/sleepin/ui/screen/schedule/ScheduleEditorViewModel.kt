@@ -3,7 +3,9 @@ package com.kurosu.sleepin.ui.screen.schedule
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kurosu.sleepin.domain.usecase.schedule.ExportScheduleCsvUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleDetailUseCase
+import com.kurosu.sleepin.domain.usecase.schedule.ImportScheduleCsvUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.SaveScheduleResult
 import com.kurosu.sleepin.domain.usecase.schedule.SaveScheduleUseCase
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -34,6 +36,7 @@ data class EditableSchedulePeriod(
 data class ScheduleEditorUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
+    val isCsvBusy: Boolean = false,
     val name: String = "",
     val periods: List<EditableSchedulePeriod> = listOf(
         EditableSchedulePeriod(id = 0, startTime = "08:00", endTime = "08:45")
@@ -44,7 +47,9 @@ data class ScheduleEditorUiState(
     val quickBreakMinutes: String = "10",
     val quickPeriodCount: String = "10",
     // One-shot message consumed by the screen snackbar.
-    val message: String? = null
+    val message: String? = null,
+    val csvImportErrorDetail: String? = null,
+    val isEditMode: Boolean = false
 )
 
 /**
@@ -52,6 +57,7 @@ data class ScheduleEditorUiState(
  */
 sealed interface ScheduleEditorEvent {
     data object Saved : ScheduleEditorEvent
+    data class ExportCsvReady(val fileName: String, val content: String) : ScheduleEditorEvent
 }
 
 /**
@@ -64,13 +70,15 @@ sealed interface ScheduleEditorEvent {
 class ScheduleEditorViewModel(
     private val scheduleId: Long?,
     private val getScheduleDetailUseCase: GetScheduleDetailUseCase,
-    private val saveScheduleUseCase: SaveScheduleUseCase
+    private val saveScheduleUseCase: SaveScheduleUseCase,
+    private val importScheduleCsvUseCase: ImportScheduleCsvUseCase,
+    private val exportScheduleCsvUseCase: ExportScheduleCsvUseCase
 ) : ViewModel() {
 
     // Preserved on edit so save keeps historical creation time.
     private var createdAt: Long? = null
 
-    private val _uiState = MutableStateFlow(ScheduleEditorUiState())
+    private val _uiState = MutableStateFlow(ScheduleEditorUiState(isEditMode = scheduleId != null))
     val uiState: StateFlow<ScheduleEditorUiState> = _uiState.asStateFlow()
 
     private val _events = MutableSharedFlow<ScheduleEditorEvent>()
@@ -85,6 +93,10 @@ class ScheduleEditorViewModel(
     /** Clears current snackbar message after UI consumes it. */
     fun consumeMessage() {
         _uiState.update { it.copy(message = null) }
+    }
+
+    fun consumeCsvImportErrorDetail() {
+        _uiState.update { it.copy(csvImportErrorDetail = null) }
     }
 
     fun onNameChange(value: String) {
@@ -204,6 +216,80 @@ class ScheduleEditorViewModel(
         }
     }
 
+    /**
+     * Imports one CSV file and creates a brand-new schedule from it.
+     */
+    fun importCsvForCreate(rawCsv: String) {
+        if (scheduleId != null) {
+            emitMessage("仅支持在新建作息表时导入 CSV")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCsvBusy = true) }
+            val report = importScheduleCsvUseCase(rawCsv)
+            val hasImported = report.importedScheduleId != null && report.importedPeriodCount > 0
+
+            _uiState.update {
+                it.copy(
+                    isCsvBusy = false,
+                    message = if (hasImported) {
+                        buildString {
+                            append("导入完成：")
+                            append(report.importedPeriodCount)
+                            append(" 条课节")
+                            if (report.errors.isNotEmpty()) {
+                                append("，")
+                                append(report.errors.size)
+                                append(" 行失败")
+                            }
+                        }
+                    } else {
+                        "未导入任何课节"
+                    },
+                    csvImportErrorDetail = buildCsvImportErrorDetail(report)
+                )
+            }
+
+            if (hasImported && report.errors.isEmpty()) {
+                _events.emit(ScheduleEditorEvent.Saved)
+            }
+        }
+    }
+
+    /**
+     * Exports the currently edited schedule as a CSV file.
+     */
+    fun exportCsvForEditingSchedule() {
+        val id = scheduleId
+        if (id == null) {
+            emitMessage("请先保存作息表后再导出 CSV")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCsvBusy = true) }
+            runCatching {
+                exportScheduleCsvUseCase(id)
+            }.onSuccess { csv ->
+                _uiState.update { it.copy(isCsvBusy = false) }
+                _events.emit(
+                    ScheduleEditorEvent.ExportCsvReady(
+                        fileName = "sleepin_schedule_${id}_${System.currentTimeMillis()}.csv",
+                        content = csv
+                    )
+                )
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        isCsvBusy = false,
+                        message = "导出失败：${error.message ?: "未知错误"}"
+                    )
+                }
+            }
+        }
+    }
+
     /** Loads existing schedule and maps domain detail to editable text state. */
     private fun loadSchedule(id: Long) {
         viewModelScope.launch {
@@ -250,6 +336,20 @@ class ScheduleEditorViewModel(
         _uiState.update { it.copy(message = message) }
     }
 
+    private fun buildCsvImportErrorDetail(report: com.kurosu.sleepin.domain.usecase.schedule.ScheduleCsvImportReport): String? {
+        if (report.errors.isEmpty()) return null
+        return buildString {
+            append("导入遇到错误，请检查以下行：\n\n")
+            report.errors.forEach { error ->
+                append("第 ")
+                append(error.rowNumber)
+                append(" 行：")
+                append(error.message)
+                append('\n')
+            }
+        }.trimEnd()
+    }
+
     companion object {
         /**
          * Manual factory used until DI framework wiring is introduced.
@@ -257,7 +357,9 @@ class ScheduleEditorViewModel(
         fun factory(
             scheduleId: Long?,
             getScheduleDetailUseCase: GetScheduleDetailUseCase,
-            saveScheduleUseCase: SaveScheduleUseCase
+            saveScheduleUseCase: SaveScheduleUseCase,
+            importScheduleCsvUseCase: ImportScheduleCsvUseCase,
+            exportScheduleCsvUseCase: ExportScheduleCsvUseCase
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -265,7 +367,9 @@ class ScheduleEditorViewModel(
                     return ScheduleEditorViewModel(
                         scheduleId = scheduleId,
                         getScheduleDetailUseCase = getScheduleDetailUseCase,
-                        saveScheduleUseCase = saveScheduleUseCase
+                        saveScheduleUseCase = saveScheduleUseCase,
+                        importScheduleCsvUseCase = importScheduleCsvUseCase,
+                        exportScheduleCsvUseCase = exportScheduleCsvUseCase
                     ) as T
                 }
             }

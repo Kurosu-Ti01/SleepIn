@@ -3,6 +3,8 @@ package com.kurosu.sleepin.di
 import com.kurosu.sleepin.data.local.SleepInDatabase
 import com.kurosu.sleepin.data.csv.CsvExporter
 import com.kurosu.sleepin.data.csv.CsvImporter
+import com.kurosu.sleepin.data.csv.ScheduleCsvExporter
+import com.kurosu.sleepin.data.csv.ScheduleCsvImporter
 import com.kurosu.sleepin.data.preferences.SettingsPreferenceStore
 import com.kurosu.sleepin.data.repository.CourseRepositoryImpl
 import com.kurosu.sleepin.data.repository.ScheduleRepositoryImpl
@@ -22,6 +24,10 @@ object RepositoryModule {
     fun provideCsvImporter(): CsvImporter = CsvImporter()
 
     fun provideCsvExporter(): CsvExporter = CsvExporter()
+
+    fun provideScheduleCsvImporter(): ScheduleCsvImporter = ScheduleCsvImporter()
+
+    fun provideScheduleCsvExporter(): ScheduleCsvExporter = ScheduleCsvExporter()
 
     fun provideTimetableRepository(database: SleepInDatabase): TimetableRepository =
         TimetableRepositoryImpl(DatabaseModule.provideTimetableDao(database))
