@@ -15,6 +15,7 @@
 local.properties
 
 /.github
+/.kotlin
 /docs/temp
 /docs/SleepIn-Docs/node_modules
 # VuePress 默认临时文件目录
@@ -23,5 +24,6 @@ local.properties
 /docs/SleepIn-Docs/docs/.vuepress/.cache
 # VuePress 默认构建生成的静态文件目录
 /docs/SleepIn-Docs/docs/.vuepress/dist
-
+/.idea/deploymentTargetSelector.xml
+/.idea/copilot.data.migration.ask2agent.xml
 TODO.md
