@@ -39,18 +39,18 @@ export default defineUserConfig({
 
   theme: plumeTheme({
     /* 添加您的部署域名, 有助于 SEO, 生成 sitemap */
-    // hostname: 'https://your_site_url',
+    hostname: 'https://sleepin.kurosu.qzz.io/',
 
     /* 文档仓库配置，用于 editLink */
-    // docsRepo: '',
-    // docsDir: 'docs',
+    docsRepo: 'https://github.com/Kurosu-Ti01/SleepIn',
+    docsDir: 'docs/SleepIn-Docs/docs',
     // docsBranch: '',
 
     /* 页内信息 */
-    // editLink: true,
+    editLink: true,
     // lastUpdated: true,
-    // contributors: true,
-    // changelog: false,
+    contributors: true,
+    changelog: false,
 
     /**
      * 编译缓存，加快编译速度
