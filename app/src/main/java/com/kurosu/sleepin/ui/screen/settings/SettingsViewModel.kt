@@ -94,6 +94,9 @@ class SettingsViewModel(
     fun setCourseCellHeightDp(heightDp: Int) =
         updateSettings { it.copy(courseCellHeightDp = heightDp.coerceIn(44, 120)) }
 
+    fun setShowNonCurrentWeekCourses(enabled: Boolean) =
+        updateSettings { it.copy(showNonCurrentWeekCourses = enabled) }
+
     /**
      * Serializes current settings and emits an effect for file save action.
      */

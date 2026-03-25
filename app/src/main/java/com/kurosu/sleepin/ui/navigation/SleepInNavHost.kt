@@ -54,7 +54,8 @@ fun SleepInNavHost(
                     getActiveTimetableUseCase = app.getActiveTimetableUseCase,
                     getCoursesForTimetableUseCase = app.getCoursesForTimetableUseCase,
                     getScheduleDetailUseCase = app.getScheduleDetailUseCase,
-                    setActiveTimetableUseCase = app.setActiveTimetableUseCase
+                    setActiveTimetableUseCase = app.setActiveTimetableUseCase,
+                    observeSettingsUseCase = app.observeSettingsUseCase
                 )
             )
             HomeScreen(

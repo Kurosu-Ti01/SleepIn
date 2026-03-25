@@ -184,6 +184,12 @@ fun SettingsScreen(
                     onValueChange = { viewModel.setCourseCellHeightDp(it.toInt()) },
                     valueRange = 44f..120f
                 )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsSwitchRow(
+                    title = "显示非本周课程",
+                    checked = uiState.settings.showNonCurrentWeekCourses,
+                    onCheckedChange = viewModel::setShowNonCurrentWeekCourses
+                )
             }
 
             SettingsSectionCard(title = "数据") {

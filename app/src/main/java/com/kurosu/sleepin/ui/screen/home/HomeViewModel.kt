@@ -5,9 +5,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kurosu.sleepin.domain.model.CourseSession
 import com.kurosu.sleepin.domain.model.CourseWithSessions
+import com.kurosu.sleepin.domain.model.Schedule
 import com.kurosu.sleepin.domain.model.SchedulePeriod
 import com.kurosu.sleepin.domain.model.Timetable
 import com.kurosu.sleepin.domain.model.WeekType
+import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
 import com.kurosu.sleepin.domain.usecase.course.GetCoursesForTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleDetailUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetSchedulesUseCase
@@ -44,7 +46,8 @@ class HomeViewModel(
     private val getActiveTimetableUseCase: GetActiveTimetableUseCase,
     private val getCoursesForTimetableUseCase: GetCoursesForTimetableUseCase,
     private val getScheduleDetailUseCase: GetScheduleDetailUseCase,
-    private val setActiveTimetableUseCase: SetActiveTimetableUseCase
+    private val setActiveTimetableUseCase: SetActiveTimetableUseCase,
+    private val observeSettingsUseCase: ObserveSettingsUseCase
 ) : ViewModel() {
 
     private val topBarDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -126,13 +129,38 @@ class HomeViewModel(
      */
     private fun observeHomeState() {
         viewModelScope.launch {
-            combine(
+            val timetablesAndSchedulesFlow = combine(
                 getTimetablesUseCase(),
-                getSchedulesUseCase(),
+                getSchedulesUseCase()
+            ) { timetables: List<Timetable>, schedules: List<Schedule> ->
+                timetables to schedules
+            }
+            val payloadAndManualWeekFlow = combine(
                 activeTimetablePayloadFlow(),
-                manualSelectedWeek,
+                manualSelectedWeek
+            ) { payload: ActiveTimetablePayload, manualWeek: Int? ->
+                payload to manualWeek
+            }
+
+            combine(
+                combine(timetablesAndSchedulesFlow, payloadAndManualWeekFlow) { timetableAndSchedule, payloadAndWeek ->
+                    HomeStateInputs(
+                        timetables = timetableAndSchedule.first,
+                        schedules = timetableAndSchedule.second,
+                        payload = payloadAndWeek.first,
+                        manualWeek = payloadAndWeek.second
+                    )
+                },
                 now
-            ) { timetables, schedules, payload, manualWeek, currentDateTime ->
+            ) { inputs, currentDateTime ->
+                inputs to currentDateTime
+            }.combine(observeSettingsUseCase()) { inputWithTime, settings ->
+                val inputs = inputWithTime.first
+                val currentDateTime = inputWithTime.second
+                val timetables = inputs.timetables
+                val schedules = inputs.schedules
+                val payload = inputs.payload
+                val manualWeek = inputs.manualWeek
                 val active = payload.activeTimetable
                 val totalWeeks = active?.totalWeeks ?: 18
                 val semesterInfo = active?.let {
@@ -155,7 +183,11 @@ class HomeViewModel(
                 val visibleCourses = if (active == null) {
                     emptyList()
                 } else {
-                    buildVisibleCourseCells(payload.courses, selectedWeek)
+                    buildVisibleCourseCells(
+                        source = payload.courses,
+                        week = selectedWeek,
+                        showNonCurrentWeekCourses = settings.showNonCurrentWeekCourses
+                    )
                 }
 
                 val isShowingCurrentWeek = semesterInfo?.progress == SemesterProgress.IN_PROGRESS &&
@@ -233,14 +265,15 @@ class HomeViewModel(
      */
     private fun buildVisibleCourseCells(
         source: List<CourseWithSessions>,
-        week: Int
+        week: Int,
+        showNonCurrentWeekCourses: Boolean
     ): List<HomeCourseCellUi> {
-        return source.flatMapIndexed { aggregateIndex, aggregate ->
+        val allCells = source.flatMapIndexed { aggregateIndex, aggregate ->
             aggregate.sessions
-                .filter { session -> isSessionVisibleInWeek(session, week) }
                 .mapIndexed { sessionIndex, session ->
+                    val isCurrentWeek = isSessionVisibleInWeek(session, week)
                     HomeCourseCellUi(
-                        uniqueId = "${aggregate.course.id}_${session.id}_${aggregateIndex}_$sessionIndex",
+                        uniqueId = "${aggregate.course.id}_${session.id}_${aggregateIndex}_${sessionIndex}_${if (isCurrentWeek) "current" else "other"}",
                         courseId = aggregate.course.id,
                         sessionId = session.id,
                         name = aggregate.course.name,
@@ -251,15 +284,40 @@ class HomeViewModel(
                         startPeriod = session.startPeriod,
                         endPeriod = session.endPeriod,
                         location = session.location,
-                        weekDescription = buildWeekDescription(session)
+                        weekDescription = buildWeekDescription(session),
+                        isCurrentWeek = isCurrentWeek
                     )
                 }
-        }.sortedWith(
+        }
+
+        val currentWeekCells = allCells.filter { it.isCurrentWeek }
+        if (!showNonCurrentWeekCourses) {
+            return sortCourseCells(currentWeekCells)
+        }
+
+        val nonCurrentWeekCells = allCells
+            .filterNot { it.isCurrentWeek }
+            .filter { candidate ->
+                currentWeekCells.none { current ->
+                    current.dayOfWeek == candidate.dayOfWeek && periodsOverlap(current, candidate)
+                }
+            }
+
+        return sortCourseCells(currentWeekCells + nonCurrentWeekCells)
+    }
+
+    private fun sortCourseCells(cells: List<HomeCourseCellUi>): List<HomeCourseCellUi> {
+        return cells.sortedWith(
             compareBy<HomeCourseCellUi> { it.dayOfWeek }
                 .thenBy { it.startPeriod }
                 .thenBy { it.endPeriod }
+                .thenByDescending { it.isCurrentWeek }
                 .thenBy { it.name }
         )
+    }
+
+    private fun periodsOverlap(a: HomeCourseCellUi, b: HomeCourseCellUi): Boolean {
+        return a.startPeriod <= b.endPeriod && b.startPeriod <= a.endPeriod
     }
 
     private fun isSessionVisibleInWeek(session: CourseSession, week: Int): Boolean {
@@ -328,7 +386,8 @@ class HomeViewModel(
             getActiveTimetableUseCase: GetActiveTimetableUseCase,
             getCoursesForTimetableUseCase: GetCoursesForTimetableUseCase,
             getScheduleDetailUseCase: GetScheduleDetailUseCase,
-            setActiveTimetableUseCase: SetActiveTimetableUseCase
+            setActiveTimetableUseCase: SetActiveTimetableUseCase,
+            observeSettingsUseCase: ObserveSettingsUseCase
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -339,7 +398,8 @@ class HomeViewModel(
                         getActiveTimetableUseCase = getActiveTimetableUseCase,
                         getCoursesForTimetableUseCase = getCoursesForTimetableUseCase,
                         getScheduleDetailUseCase = getScheduleDetailUseCase,
-                        setActiveTimetableUseCase = setActiveTimetableUseCase
+                        setActiveTimetableUseCase = setActiveTimetableUseCase,
+                        observeSettingsUseCase = observeSettingsUseCase
                     ) as T
                 }
             }
@@ -350,6 +410,13 @@ private data class ActiveTimetablePayload(
     val activeTimetable: Timetable? = null,
     val periods: List<SchedulePeriod> = emptyList(),
     val courses: List<CourseWithSessions> = emptyList()
+)
+
+private data class HomeStateInputs(
+    val timetables: List<Timetable>,
+    val schedules: List<Schedule>,
+    val payload: ActiveTimetablePayload,
+    val manualWeek: Int?
 )
 
 /**
@@ -385,7 +452,8 @@ data class HomeCourseCellUi(
     val startPeriod: Int,
     val endPeriod: Int,
     val location: String?,
-    val weekDescription: String
+    val weekDescription: String,
+    val isCurrentWeek: Boolean
 )
 
 /**

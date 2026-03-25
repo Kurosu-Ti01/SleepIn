@@ -27,6 +27,7 @@ data class AppSettings(
     val fluidCloudEnabled: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColorEnabled: Boolean = true,
-    val courseCellHeightDp: Int = 68
+    val courseCellHeightDp: Int = 68,
+    val showNonCurrentWeekCourses: Boolean = false
 )
 

@@ -19,7 +19,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /**
@@ -42,11 +41,16 @@ fun CourseCell(
         }
     }
     val teacherPart = cell.teacher?.takeIf { it.isNotBlank() }
+    val containerColor = if (cell.isCurrentWeek) {
+        Color(cell.color)
+    } else {
+        Color(cell.color).copy(alpha = 0.45f)
+    }
 
     Card(
         modifier = modifier.clickable { onClick(cell) },
         shape = RoundedCornerShape(6.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(cell.color))
+        colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Column(
             modifier = Modifier
@@ -55,6 +59,14 @@ fun CourseCell(
                 .padding(horizontal = 2.dp, vertical = 3.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
+            if (!cell.isCurrentWeek) {
+                Text(
+                    text = "非本周",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.92f),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             Text(
                 text = buildAnnotatedString {
                     withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {

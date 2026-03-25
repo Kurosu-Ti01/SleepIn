@@ -39,7 +39,8 @@ class SettingsRepositoryImpl(
                 .getOrNull(prefs[Keys.THEME_MODE] ?: ThemeMode.SYSTEM.ordinal)
                 ?: ThemeMode.SYSTEM,
             dynamicColorEnabled = prefs[Keys.DYNAMIC_COLOR_ENABLED] ?: true,
-            courseCellHeightDp = (prefs[Keys.COURSE_CELL_HEIGHT_DP] ?: 68).coerceIn(44, 120)
+            courseCellHeightDp = (prefs[Keys.COURSE_CELL_HEIGHT_DP] ?: 68).coerceIn(44, 120),
+            showNonCurrentWeekCourses = prefs[Keys.SHOW_NON_CURRENT_WEEK_COURSES] ?: false
         )
     }
 
@@ -51,6 +52,7 @@ class SettingsRepositoryImpl(
             prefs[Keys.THEME_MODE] = settings.themeMode.ordinal
             prefs[Keys.DYNAMIC_COLOR_ENABLED] = settings.dynamicColorEnabled
             prefs[Keys.COURSE_CELL_HEIGHT_DP] = settings.courseCellHeightDp.coerceIn(44, 120)
+            prefs[Keys.SHOW_NON_CURRENT_WEEK_COURSES] = settings.showNonCurrentWeekCourses
         }
     }
 
@@ -63,7 +65,8 @@ class SettingsRepositoryImpl(
             fluidCloudEnabled = current.fluidCloudEnabled,
             themeMode = current.themeMode.name,
             dynamicColorEnabled = current.dynamicColorEnabled,
-            courseCellHeightDp = current.courseCellHeightDp
+            courseCellHeightDp = current.courseCellHeightDp,
+            showNonCurrentWeekCourses = current.showNonCurrentWeekCourses
         )
         return json.encodeToString(SettingsBackupPayload.serializer(), payload)
     }
@@ -76,7 +79,8 @@ class SettingsRepositoryImpl(
             fluidCloudEnabled = payload.fluidCloudEnabled,
             themeMode = ThemeMode.entries.firstOrNull { it.name == payload.themeMode } ?: ThemeMode.SYSTEM,
             dynamicColorEnabled = payload.dynamicColorEnabled,
-            courseCellHeightDp = payload.courseCellHeightDp.coerceIn(44, 120)
+            courseCellHeightDp = payload.courseCellHeightDp.coerceIn(44, 120),
+            showNonCurrentWeekCourses = payload.showNonCurrentWeekCourses
         )
         updateSettings(restored)
     }
@@ -91,6 +95,7 @@ class SettingsRepositoryImpl(
         val THEME_MODE = intPreferencesKey("theme_mode")
         val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         val COURSE_CELL_HEIGHT_DP = intPreferencesKey("course_cell_height_dp")
+        val SHOW_NON_CURRENT_WEEK_COURSES = booleanPreferencesKey("show_non_current_week_courses")
     }
 
     @Serializable
@@ -101,7 +106,8 @@ class SettingsRepositoryImpl(
         val fluidCloudEnabled: Boolean,
         val themeMode: String,
         val dynamicColorEnabled: Boolean,
-        val courseCellHeightDp: Int
+        val courseCellHeightDp: Int,
+        val showNonCurrentWeekCourses: Boolean = false
     )
 }
 

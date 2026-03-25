@@ -26,6 +26,7 @@ class SettingsRepositoryImplTest {
         assertEquals(10, settings.reminderMinutes)
         assertEquals(ThemeMode.SYSTEM, settings.themeMode)
         assertEquals(68, settings.courseCellHeightDp)
+        assertEquals(false, settings.showNonCurrentWeekCourses)
     }
 
     @Test
@@ -37,7 +38,8 @@ class SettingsRepositoryImplTest {
             fluidCloudEnabled = false,
             themeMode = ThemeMode.DARK,
             dynamicColorEnabled = false,
-            courseCellHeightDp = 84
+            courseCellHeightDp = 84,
+            showNonCurrentWeekCourses = true
         )
 
         repository.updateSettings(updated)

@@ -33,18 +33,24 @@ fun CourseDetailSheet(
             style = MaterialTheme.typography.titleMedium
         )
 
+        Text(
+            text = if (course.isCurrentWeek) "本周课程" else "非本周课程",
+            style = MaterialTheme.typography.bodyMedium
+        )
+
         if (!course.location.isNullOrBlank()) {
-            Text(text = "Location: ${course.location}", style = MaterialTheme.typography.bodyLarge)
+            Text(text = "地点: ${course.location}", style = MaterialTheme.typography.bodyLarge)
         }
 
         if (!course.teacher.isNullOrBlank()) {
-            Text(text = "Teacher: ${course.teacher}", style = MaterialTheme.typography.bodyLarge)
+            Text(text = "教室: ${course.teacher}", style = MaterialTheme.typography.bodyLarge)
         }
 
-        Text(text = "Weeks: ${course.weekDescription}", style = MaterialTheme.typography.bodyMedium)
+
+        Text(text = "上课周数: ${course.weekDescription}", style = MaterialTheme.typography.bodyMedium)
 
         if (!course.note.isNullOrBlank()) {
-            Text(text = "Note: ${course.note}", style = MaterialTheme.typography.bodyMedium)
+            Text(text = "备注: ${course.note}", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
