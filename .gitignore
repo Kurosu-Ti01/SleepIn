@@ -26,4 +26,6 @@ local.properties
 /docs/SleepIn-Docs/docs/.vuepress/dist
 /.idea/deploymentTargetSelector.xml
 /.idea/copilot.data.migration.ask2agent.xml
+/app/release
+
 TODO.md
