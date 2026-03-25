@@ -14,6 +14,15 @@ android {
         }
     }
 
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = true // true 会额外生成一个通用包
+        }
+    }
+
     defaultConfig {
         applicationId = "com.kurosu.sleepin"
         minSdk = 26
