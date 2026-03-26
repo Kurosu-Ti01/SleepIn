@@ -229,7 +229,8 @@ fun SleepInNavHost(
                     observeSettingsUseCase = app.observeSettingsUseCase,
                     updateSettingsUseCase = app.updateSettingsUseCase,
                     exportSettingsBackupUseCase = app.exportSettingsBackupUseCase,
-                    importSettingsBackupUseCase = app.importSettingsBackupUseCase
+                    importSettingsBackupUseCase = app.importSettingsBackupUseCase,
+                    performUpdateCheckUseCase = app.performUpdateCheckUseCase
                 )
             )
             SettingsScreen(

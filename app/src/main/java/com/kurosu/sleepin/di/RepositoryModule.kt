@@ -10,10 +10,12 @@ import com.kurosu.sleepin.data.repository.CourseRepositoryImpl
 import com.kurosu.sleepin.data.repository.ScheduleRepositoryImpl
 import com.kurosu.sleepin.data.repository.SettingsRepositoryImpl
 import com.kurosu.sleepin.data.repository.TimetableRepositoryImpl
+import com.kurosu.sleepin.data.update.GitHubUpdateRepositoryImpl
 import com.kurosu.sleepin.domain.repository.CourseRepository
 import com.kurosu.sleepin.domain.repository.ScheduleRepository
 import com.kurosu.sleepin.domain.repository.SettingsRepository
 import com.kurosu.sleepin.domain.repository.TimetableRepository
+import com.kurosu.sleepin.domain.repository.UpdateRepository
 
 /**
  * Temporary manual repository provider.
@@ -49,4 +51,9 @@ object RepositoryModule {
 
     fun provideSettingsRepository(dataStore: SettingsPreferenceStore): SettingsRepository =
         SettingsRepositoryImpl(dataStore)
+
+    /**
+     * Provides GitHub-backed update repository without introducing extra DI frameworks.
+     */
+    fun provideUpdateRepository(): UpdateRepository = GitHubUpdateRepositoryImpl()
 }

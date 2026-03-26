@@ -25,7 +25,7 @@ android {
 
     defaultConfig {
         applicationId = "com.kurosu.sleepin"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
@@ -50,6 +50,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

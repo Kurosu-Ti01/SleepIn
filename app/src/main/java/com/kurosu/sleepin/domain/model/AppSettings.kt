@@ -28,6 +28,15 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColorEnabled: Boolean = true,
     val courseCellHeightDp: Int = 68,
-    val showNonCurrentWeekCourses: Boolean = false
+    val showNonCurrentWeekCourses: Boolean = false,
+    val autoCheckUpdateEnabled: Boolean = true,
+    val updateAvailable: Boolean = false,
+    val latestRemoteVersion: String = "",
+    val latestReleaseNotes: String = "",
+    val latestApkDownloadUrl: String = "",
+    val latestReleasePageUrl: String = "",
+    val dismissedUpdateVersion: String = "",
+    val lastUpdateCheckError: String = "",
+    val lastUpdateCheckAtMillis: Long = 0L
 )
 

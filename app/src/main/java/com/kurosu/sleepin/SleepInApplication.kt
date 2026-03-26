@@ -32,11 +32,15 @@ import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
+import com.kurosu.sleepin.domain.usecase.settings.PerformUpdateCheckUseCase
 import com.kurosu.sleepin.domain.usecase.settings.UpdateSettingsUseCase
+import com.kurosu.sleepin.update.UpdateCheckScheduler
 import com.kurosu.sleepin.widget.WidgetRefreshScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -100,6 +104,8 @@ class SleepInApplication : Application() {
         private set
     lateinit var importSettingsBackupUseCase: ImportSettingsBackupUseCase
         private set
+    lateinit var performUpdateCheckUseCase: PerformUpdateCheckUseCase
+        private set
 
     lateinit var importCsvUseCase: ImportCsvUseCase
         private set
@@ -116,6 +122,7 @@ class SleepInApplication : Application() {
         initGraph()
         seedDefaultSchedule()
         scheduleWidgetRefreshPipeline()
+        observeAutoUpdateScheduling()
         registerWidgetRefreshOnDatabaseChanges()
     }
 
@@ -127,6 +134,7 @@ class SleepInApplication : Application() {
         val courseRepository = RepositoryModule.provideCourseRepository(database)
         val checkConflictUseCase = CheckConflictUseCase(courseRepository)
         val settingsRepository = RepositoryModule.provideSettingsRepository(settingsDataStore)
+        val updateRepository = RepositoryModule.provideUpdateRepository()
         val csvImporter = RepositoryModule.provideCsvImporter()
         val csvExporter = RepositoryModule.provideCsvExporter()
         val scheduleCsvImporter = RepositoryModule.provideScheduleCsvImporter()
@@ -165,6 +173,10 @@ class SleepInApplication : Application() {
         updateSettingsUseCase = UpdateSettingsUseCase(settingsRepository)
         exportSettingsBackupUseCase = ExportSettingsBackupUseCase(settingsRepository)
         importSettingsBackupUseCase = ImportSettingsBackupUseCase(settingsRepository)
+        performUpdateCheckUseCase = PerformUpdateCheckUseCase(
+            settingsRepository = settingsRepository,
+            updateRepository = updateRepository
+        )
 
         importCsvUseCase = ImportCsvUseCase(csvImporter, courseRepository)
         exportCsvUseCase = ExportCsvUseCase(courseRepository, timetableRepository, csvExporter)
@@ -176,6 +188,23 @@ class SleepInApplication : Application() {
     private fun scheduleWidgetRefreshPipeline() {
         WidgetRefreshScheduler.schedulePeriodic(this)
         WidgetRefreshScheduler.requestImmediateUpdate(this)
+    }
+
+    /**
+     * Keeps periodic update checks aligned with user preference.
+     */
+    private fun observeAutoUpdateScheduling() {
+        appScope.launch {
+            observeSettingsUseCase()
+                .map { it.autoCheckUpdateEnabled }
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    UpdateCheckScheduler.syncPeriodic(this@SleepInApplication, enabled)
+                    if (enabled) {
+                        UpdateCheckScheduler.requestImmediateCheck(this@SleepInApplication, force = false)
+                    }
+                }
+        }
     }
 
     /**

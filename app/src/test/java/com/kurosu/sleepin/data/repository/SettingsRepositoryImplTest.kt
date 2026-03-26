@@ -27,6 +27,11 @@ class SettingsRepositoryImplTest {
         assertEquals(ThemeMode.SYSTEM, settings.themeMode)
         assertEquals(68, settings.courseCellHeightDp)
         assertEquals(false, settings.showNonCurrentWeekCourses)
+        assertTrue(settings.autoCheckUpdateEnabled)
+        assertEquals(false, settings.updateAvailable)
+        assertEquals("", settings.latestRemoteVersion)
+        assertEquals("", settings.latestReleaseNotes)
+        assertEquals("", settings.dismissedUpdateVersion)
     }
 
     @Test
@@ -39,7 +44,16 @@ class SettingsRepositoryImplTest {
             themeMode = ThemeMode.DARK,
             dynamicColorEnabled = false,
             courseCellHeightDp = 84,
-            showNonCurrentWeekCourses = true
+            showNonCurrentWeekCourses = true,
+            autoCheckUpdateEnabled = false,
+            updateAvailable = true,
+            latestRemoteVersion = "v0.2.0",
+            latestReleaseNotes = "## Changes\n- Added feature",
+            latestApkDownloadUrl = "https://example.com/sleepin-universal.apk",
+            latestReleasePageUrl = "https://github.com/Kurosu-Ti01/SleepIn/releases/tag/v0.2.0",
+            dismissedUpdateVersion = "",
+            lastUpdateCheckError = "",
+            lastUpdateCheckAtMillis = 123456789L
         )
 
         repository.updateSettings(updated)

@@ -10,7 +10,8 @@ const zhDevDoc = defineCollection({
       {text: '1. 编译构建', prefix: '1.build-debug', items: 'auto' },
       {text: '2. 项目架构', prefix: '2.architecture', items: 'auto' },
       {text: '3. 核心模块', prefix: '3.business', items: 'auto' },
-      {text: '4. 其他东西', prefix: '4.others', items: 'auto' },
+      {text: '4. 功能实现', prefix: '4.feature', items: 'auto' },
+      {text: '5. 其他东西', prefix: '5.others', items: 'auto' },
       ]
 })
 

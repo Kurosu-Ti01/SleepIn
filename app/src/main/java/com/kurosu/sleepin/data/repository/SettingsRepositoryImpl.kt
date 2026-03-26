@@ -5,6 +5,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kurosu.sleepin.domain.model.AppSettings
 import com.kurosu.sleepin.domain.model.ThemeMode
 import com.kurosu.sleepin.domain.repository.SettingsRepository
@@ -40,7 +42,16 @@ class SettingsRepositoryImpl(
                 ?: ThemeMode.SYSTEM,
             dynamicColorEnabled = prefs[Keys.DYNAMIC_COLOR_ENABLED] ?: true,
             courseCellHeightDp = (prefs[Keys.COURSE_CELL_HEIGHT_DP] ?: 68).coerceIn(44, 120),
-            showNonCurrentWeekCourses = prefs[Keys.SHOW_NON_CURRENT_WEEK_COURSES] ?: false
+            showNonCurrentWeekCourses = prefs[Keys.SHOW_NON_CURRENT_WEEK_COURSES] ?: false,
+            autoCheckUpdateEnabled = prefs[Keys.AUTO_CHECK_UPDATE_ENABLED] ?: true,
+            updateAvailable = prefs[Keys.UPDATE_AVAILABLE] ?: false,
+            latestRemoteVersion = prefs[Keys.LATEST_REMOTE_VERSION] ?: "",
+            latestReleaseNotes = prefs[Keys.LATEST_RELEASE_NOTES] ?: "",
+            latestApkDownloadUrl = prefs[Keys.LATEST_APK_DOWNLOAD_URL] ?: "",
+            latestReleasePageUrl = prefs[Keys.LATEST_RELEASE_PAGE_URL] ?: "",
+            dismissedUpdateVersion = prefs[Keys.DISMISSED_UPDATE_VERSION] ?: "",
+            lastUpdateCheckError = prefs[Keys.LAST_UPDATE_CHECK_ERROR] ?: "",
+            lastUpdateCheckAtMillis = prefs[Keys.LAST_UPDATE_CHECK_AT_MILLIS] ?: 0L
         )
     }
 
@@ -53,20 +64,38 @@ class SettingsRepositoryImpl(
             prefs[Keys.DYNAMIC_COLOR_ENABLED] = settings.dynamicColorEnabled
             prefs[Keys.COURSE_CELL_HEIGHT_DP] = settings.courseCellHeightDp.coerceIn(44, 120)
             prefs[Keys.SHOW_NON_CURRENT_WEEK_COURSES] = settings.showNonCurrentWeekCourses
+            prefs[Keys.AUTO_CHECK_UPDATE_ENABLED] = settings.autoCheckUpdateEnabled
+            prefs[Keys.UPDATE_AVAILABLE] = settings.updateAvailable
+            prefs[Keys.LATEST_REMOTE_VERSION] = settings.latestRemoteVersion
+            prefs[Keys.LATEST_RELEASE_NOTES] = settings.latestReleaseNotes
+            prefs[Keys.LATEST_APK_DOWNLOAD_URL] = settings.latestApkDownloadUrl
+            prefs[Keys.LATEST_RELEASE_PAGE_URL] = settings.latestReleasePageUrl
+            prefs[Keys.DISMISSED_UPDATE_VERSION] = settings.dismissedUpdateVersion
+            prefs[Keys.LAST_UPDATE_CHECK_ERROR] = settings.lastUpdateCheckError
+            prefs[Keys.LAST_UPDATE_CHECK_AT_MILLIS] = settings.lastUpdateCheckAtMillis
         }
     }
 
     override suspend fun exportSettingsBackup(): String {
         val current = observeSettingsOneShot()
         val payload = SettingsBackupPayload(
-            version = 1,
+            version = 2,
             notificationsEnabled = current.notificationsEnabled,
             reminderMinutes = current.reminderMinutes,
             fluidCloudEnabled = current.fluidCloudEnabled,
             themeMode = current.themeMode.name,
             dynamicColorEnabled = current.dynamicColorEnabled,
             courseCellHeightDp = current.courseCellHeightDp,
-            showNonCurrentWeekCourses = current.showNonCurrentWeekCourses
+            showNonCurrentWeekCourses = current.showNonCurrentWeekCourses,
+            autoCheckUpdateEnabled = current.autoCheckUpdateEnabled,
+            updateAvailable = current.updateAvailable,
+            latestRemoteVersion = current.latestRemoteVersion,
+            latestReleaseNotes = current.latestReleaseNotes,
+            latestApkDownloadUrl = current.latestApkDownloadUrl,
+            latestReleasePageUrl = current.latestReleasePageUrl,
+            dismissedUpdateVersion = current.dismissedUpdateVersion,
+            lastUpdateCheckError = current.lastUpdateCheckError,
+            lastUpdateCheckAtMillis = current.lastUpdateCheckAtMillis
         )
         return json.encodeToString(SettingsBackupPayload.serializer(), payload)
     }
@@ -80,7 +109,16 @@ class SettingsRepositoryImpl(
             themeMode = ThemeMode.entries.firstOrNull { it.name == payload.themeMode } ?: ThemeMode.SYSTEM,
             dynamicColorEnabled = payload.dynamicColorEnabled,
             courseCellHeightDp = payload.courseCellHeightDp.coerceIn(44, 120),
-            showNonCurrentWeekCourses = payload.showNonCurrentWeekCourses
+            showNonCurrentWeekCourses = payload.showNonCurrentWeekCourses,
+            autoCheckUpdateEnabled = payload.autoCheckUpdateEnabled,
+            updateAvailable = payload.updateAvailable,
+            latestRemoteVersion = payload.latestRemoteVersion,
+            latestReleaseNotes = payload.latestReleaseNotes,
+            latestApkDownloadUrl = payload.latestApkDownloadUrl,
+            latestReleasePageUrl = payload.latestReleasePageUrl,
+            dismissedUpdateVersion = payload.dismissedUpdateVersion,
+            lastUpdateCheckError = payload.lastUpdateCheckError,
+            lastUpdateCheckAtMillis = payload.lastUpdateCheckAtMillis
         )
         updateSettings(restored)
     }
@@ -96,6 +134,15 @@ class SettingsRepositoryImpl(
         val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         val COURSE_CELL_HEIGHT_DP = intPreferencesKey("course_cell_height_dp")
         val SHOW_NON_CURRENT_WEEK_COURSES = booleanPreferencesKey("show_non_current_week_courses")
+        val AUTO_CHECK_UPDATE_ENABLED = booleanPreferencesKey("auto_check_update_enabled")
+        val UPDATE_AVAILABLE = booleanPreferencesKey("update_available")
+        val LATEST_REMOTE_VERSION = stringPreferencesKey("latest_remote_version")
+        val LATEST_RELEASE_NOTES = stringPreferencesKey("latest_release_notes")
+        val LATEST_APK_DOWNLOAD_URL = stringPreferencesKey("latest_apk_download_url")
+        val LATEST_RELEASE_PAGE_URL = stringPreferencesKey("latest_release_page_url")
+        val DISMISSED_UPDATE_VERSION = stringPreferencesKey("dismissed_update_version")
+        val LAST_UPDATE_CHECK_ERROR = stringPreferencesKey("last_update_check_error")
+        val LAST_UPDATE_CHECK_AT_MILLIS = longPreferencesKey("last_update_check_at_millis")
     }
 
     @Serializable
@@ -107,7 +154,16 @@ class SettingsRepositoryImpl(
         val themeMode: String,
         val dynamicColorEnabled: Boolean,
         val courseCellHeightDp: Int,
-        val showNonCurrentWeekCourses: Boolean = false
+        val showNonCurrentWeekCourses: Boolean = false,
+        val autoCheckUpdateEnabled: Boolean = true,
+        val updateAvailable: Boolean = false,
+        val latestRemoteVersion: String = "",
+        val latestReleaseNotes: String = "",
+        val latestApkDownloadUrl: String = "",
+        val latestReleasePageUrl: String = "",
+        val dismissedUpdateVersion: String = "",
+        val lastUpdateCheckError: String = "",
+        val lastUpdateCheckAtMillis: Long = 0L
     )
 }
 

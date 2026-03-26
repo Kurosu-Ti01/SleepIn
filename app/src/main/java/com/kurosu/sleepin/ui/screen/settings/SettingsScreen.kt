@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kurosu.sleepin.domain.model.ThemeMode
+import com.kurosu.sleepin.update.ApkDownloadManager
 
 /**
  * Full settings screen for Phase 6.
@@ -206,6 +207,51 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            SettingsSectionCard(title = "更新") {
+                SettingsSwitchRow(
+                    title = "自动检查更新",
+                    checked = uiState.settings.autoCheckUpdateEnabled,
+                    onCheckedChange = viewModel::setAutoCheckUpdateEnabled
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text(
+                    text = when {
+                        uiState.settings.lastUpdateCheckAtMillis <= 0L -> "尚未检查更新"
+                        uiState.settings.updateAvailable -> "发现新版本：${uiState.settings.latestRemoteVersion}"
+                        uiState.settings.lastUpdateCheckError.isNotBlank() -> "上次检查失败：${uiState.settings.lastUpdateCheckError}"
+                        else -> "当前已是最新版本"
+                    },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = viewModel::checkForUpdates,
+                        enabled = !uiState.isCheckingUpdate
+                    ) {
+                        Text(if (uiState.isCheckingUpdate) "检查中..." else "立即检查")
+                    }
+                    Button(
+                        onClick = {
+                            val url = uiState.settings.latestApkDownloadUrl.ifBlank {
+                                uiState.settings.latestReleasePageUrl
+                            }
+                            if (url.isNotBlank()) {
+                                ApkDownloadManager.enqueueApkDownload(
+                                    context = context,
+                                    downloadUrl = url,
+                                    versionTag = uiState.settings.latestRemoteVersion
+                                )
+                                viewModel.onDownloadEnqueued()
+                            }
+                        },
+                        enabled = uiState.settings.updateAvailable &&
+                            uiState.settings.latestApkDownloadUrl.isNotBlank()
+                    ) {
+                        Text("下载更新")
+                    }
+                }
+            }
         }
     }
 }
@@ -263,4 +309,5 @@ private fun Context.writeTextToUri(uri: Uri, content: String) {
         writer.write(content)
     }
 }
+
 
