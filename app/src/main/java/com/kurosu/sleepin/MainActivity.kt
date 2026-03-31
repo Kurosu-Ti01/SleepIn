@@ -1,19 +1,30 @@
 package com.kurosu.sleepin
 
+import android.Manifest
 import android.os.Bundle
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
@@ -35,6 +46,33 @@ class MainActivity : ComponentActivity() {
         setContent {
             val app = application as SleepInApplication
             val settings = app.observeSettingsUseCase().collectAsStateWithLifecycle(initialValue = AppSettings()).value
+            val context = LocalContext.current
+            val shouldRequestNotificationPermission =
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    settings.notificationsEnabled &&
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            var permissionRequestTriggered by remember { mutableStateOf(false) }
+            val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                if (!granted) {
+                    permissionRequestTriggered = true
+                }
+            }
+
+            LaunchedEffect(shouldRequestNotificationPermission) {
+                if (shouldRequestNotificationPermission && !permissionRequestTriggered) {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    permissionRequestTriggered = true
+                }
+                if (!shouldRequestNotificationPermission) {
+                    permissionRequestTriggered = false
+                }
+            }
+
             val shouldShowUpdateDialog = settings.updateAvailable &&
                 settings.latestApkDownloadUrl.isNotBlank() &&
                 settings.latestRemoteVersion.isNotBlank() &&

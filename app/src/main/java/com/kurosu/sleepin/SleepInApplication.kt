@@ -34,6 +34,7 @@ import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
 import com.kurosu.sleepin.domain.usecase.settings.PerformUpdateCheckUseCase
 import com.kurosu.sleepin.domain.usecase.settings.UpdateSettingsUseCase
+import com.kurosu.sleepin.reminder.CourseReminderScheduler
 import com.kurosu.sleepin.update.UpdateCheckScheduler
 import com.kurosu.sleepin.widget.WidgetRefreshScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -123,6 +124,7 @@ class SleepInApplication : Application() {
         seedDefaultSchedule()
         scheduleWidgetRefreshPipeline()
         observeAutoUpdateScheduling()
+        observeClassReminderScheduling()
         registerWidgetRefreshOnDatabaseChanges()
     }
 
@@ -208,6 +210,23 @@ class SleepInApplication : Application() {
     }
 
     /**
+     * Keeps class reminder workers aligned with reminder preference changes.
+     */
+    private fun observeClassReminderScheduling() {
+        appScope.launch {
+            observeSettingsUseCase()
+                .map { it.notificationsEnabled to it.reminderMinutes }
+                .distinctUntilChanged()
+                .collect { (enabled, _) ->
+                    CourseReminderScheduler.syncPeriodic(this@SleepInApplication, enabled)
+                    if (enabled) {
+                        CourseReminderScheduler.requestImmediateCheck(this@SleepInApplication)
+                    }
+                }
+        }
+    }
+
+    /**
      * Subscribes to Room invalidation callbacks and requests immediate widget refreshes.
      *
      * This keeps widget data fresh after any repository write without touching repository code.
@@ -223,6 +242,7 @@ class SleepInApplication : Application() {
             ) {
                 override fun onInvalidated(tables: Set<String>) {
                     WidgetRefreshScheduler.requestImmediateUpdate(this@SleepInApplication)
+                    CourseReminderScheduler.requestImmediateCheck(this@SleepInApplication)
                 }
             }
         )

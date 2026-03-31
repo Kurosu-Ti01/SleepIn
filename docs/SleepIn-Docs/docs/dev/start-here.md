@@ -23,7 +23,7 @@ permalink: /dev/
 | 架构 | MVVM + Clean Architecture | 分层解耦，便于维护与测试 |
 | 本地存储 | Room | SQLite ORM，支持编译期校验 |
 | 设置存储 | DataStore | 键值配置持久化 |
-| 后台任务 | WorkManager | 小组件刷新与后台调度 |
+| 后台任务 | WorkManager | 小组件刷新、更新检查与上课提醒调度 |
 | 小组件 | Glance | 桌面 Widget UI |
 | 导航 | Navigation Compose | 单 Activity 下路由管理 |
 | 文档站 | VuePress + Plume | 开发者/用户文档站点 |
