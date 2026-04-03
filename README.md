@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://sleepin.kurosu.qzz.io/" target="_blank">
-  <img src=".\docs\README\img\SleepIn.png" width="256" alt="cover">
+  <img src="./docs/SleepIn-Docs/docs/.vuepress/public/SleepIn.png" width="256" alt="cover">
   </a>
 
   <h1 align="center">
@@ -39,16 +39,14 @@ SleepIn 是一个开源、轻量、美观的 Android 课程表应用，旨在提
 <details open="True">
   <summary>Light</summary>
 
-  <!-- ![Light01](./docs/README/img/Light01.png)
-  ![Light02](./docs/README/img/Light02.png) -->
+  ![Light01](./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsLight01.jpg)
 
 </details>
 
 <details>
   <summary>Dark</summary>
 
-  <!-- ![Dark01](./docs/README/img/Dark01.png)
-  ![Dark02](./docs/README/img/Dark02.png) -->
+  ![Dark01](./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsDark01.jpg))
 
 </details>
 

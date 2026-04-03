@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://sleepin.kurosu.qzz.io/" target="_blank">
-  <img src=".\img\SleepIn.png" width="256" alt="cover">
+  <img src="../SleepIn-Docs/docs/.vuepress/public/SleepIn.png" width="256" alt="cover">
   </a>
 
   <h1 align="center">
@@ -39,16 +39,14 @@ Some basic features that have been implemented so far:
 <details open="True">
   <summary>Light</summary>
 
-  <!-- ![Light01](./docs/README/img/Light01.png)
-  ![Light02](./docs/README/img/Light02.png) -->
+  ![Light01](../SleepIn-Docs/docs/.vuepress/public/ScreenshotsLight01.jpg)
 
 </details>
 
 <details>
   <summary>Dark</summary>
 
-  <!-- ![Dark01](./docs/README/img/Dark01.png)
-  ![Dark02](./docs/README/img/Dark02.png) -->
+  ![Dark01](../SleepIn-Docs/docs/.vuepress/public/ScreenshotsDark01.jpg))
 
 </details>
 

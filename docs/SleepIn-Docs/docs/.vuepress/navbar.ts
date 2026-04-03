@@ -10,7 +10,7 @@ export const zhNavbar = defineNavbarConfig([
   { text: '首页', link: '/' },
   { text: '用户文档', link: '/user/' },
   { text: '开发者文档', link: '/dev/' },
-  { text: '博客', link: '/blog/' },
+  // { text: '博客', link: '/blog/' },
   // { text: '标签', link: '/blog/tags/' },
   // { text: '归档', link: '/blog/archives/' },
   // {
@@ -21,7 +21,9 @@ export const zhNavbar = defineNavbarConfig([
 
 export const enNavbar = defineNavbarConfig([
   { text: 'Home', link: '/en/' },
-  { text: 'Blog', link: '/en/blog/' },
+  { text: 'User Docs', link: '/user/' },
+  { text: 'Developer Docs', link: '/dev/' },
+  // { text: 'Blog', link: '/en/blog/' },
   // { text: 'Tags', link: '/en/blog/tags/' },
   // { text: 'Archives', link: '/en/blog/archives/' },
   // {
