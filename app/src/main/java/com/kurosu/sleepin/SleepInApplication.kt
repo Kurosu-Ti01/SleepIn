@@ -210,7 +210,7 @@ class SleepInApplication : Application() {
     }
 
     /**
-     * Keeps class reminder workers aligned with reminder preference changes.
+     * Keeps class reminder workers and exact alarms aligned with reminder preference changes.
      */
     private fun observeClassReminderScheduling() {
         appScope.launch {
@@ -220,7 +220,7 @@ class SleepInApplication : Application() {
                 .collect { (enabled, _) ->
                     CourseReminderScheduler.syncPeriodic(this@SleepInApplication, enabled)
                     if (enabled) {
-                        CourseReminderScheduler.requestImmediateCheck(this@SleepInApplication)
+                        CourseReminderScheduler.scheduleNextExactAlarm(this@SleepInApplication)
                     }
                 }
         }
@@ -242,7 +242,10 @@ class SleepInApplication : Application() {
             ) {
                 override fun onInvalidated(tables: Set<String>) {
                     WidgetRefreshScheduler.requestImmediateUpdate(this@SleepInApplication)
-                    CourseReminderScheduler.requestImmediateCheck(this@SleepInApplication)
+                    // Recompute exact alarm immediately so edited classes keep strict trigger timing.
+                    appScope.launch {
+                        CourseReminderScheduler.scheduleNextExactAlarm(this@SleepInApplication)
+                    }
                 }
             }
         )
