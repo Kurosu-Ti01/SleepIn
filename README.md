@@ -36,7 +36,12 @@ SleepIn 是一个开源、轻量、美观的 Android 课程表应用，旨在提
 
 ## 📷 截图预览
 
-<details open="True">
+<div style="display: flex; gap: 1rem; width: 100%; justify-content: center;">
+  <img src="./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsLight01.jpg" style="flex: 1; max-width: 50%;" alt="Light01">
+  <img src="./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsDark01.jpg" style="flex: 1; max-width: 50%;" alt="Dark01">
+</div>
+
+<!-- <details open="True">
   <summary>Light</summary>
 
   ![Light01](./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsLight01.jpg)
@@ -46,9 +51,9 @@ SleepIn 是一个开源、轻量、美观的 Android 课程表应用，旨在提
 <details>
   <summary>Dark</summary>
 
-  ![Dark01](./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsDark01.jpg))
+  ![Dark01](./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsDark01.jpg)
 
-</details>
+</details> -->
 
 ## 🌏 国际化
 
