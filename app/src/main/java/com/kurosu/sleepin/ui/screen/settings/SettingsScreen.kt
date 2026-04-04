@@ -20,11 +20,31 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.BatterySaver
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.ColorLens
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Height
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.Update
+import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
@@ -49,10 +69,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -60,8 +85,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kurosu.sleepin.BuildConfig
 import com.kurosu.sleepin.domain.model.ThemeMode
 import com.kurosu.sleepin.update.ApkDownloadManager
+import kotlinx.coroutines.launch
 
 /**
  * Full settings screen for Phase 6.
@@ -79,6 +106,8 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboardManager = LocalClipboardManager.current
+    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val alarmManager = remember(context) {
@@ -207,6 +236,7 @@ fun SettingsScreen(
         ) {
             SettingsSectionCard(title = "通知") {
                 SettingsSwitchRow(
+                    leadingIcon = Icons.Outlined.NotificationsActive,
                     title = "开启上课提醒",
                     checked = uiState.settings.notificationsEnabled,
                     onCheckedChange = { enabled ->
@@ -220,41 +250,50 @@ fun SettingsScreen(
 
                 val notificationReady = notificationPermissionGranted && appNotificationsEnabled
                 SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Alarm,
                     title = "精确闹钟授权",
                     valueText = if (exactAlarmGranted) "已授权" else "未授权",
                     valueColor = if (exactAlarmGranted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                     onClick = { context.openExactAlarmSettings(exactAlarmPermissionLauncher::launch) }
                 )
                 SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Notifications,
                     title = "通知权限",
                     valueText = if (notificationReady) "已开启" else "未开启",
                     valueColor = if (notificationReady) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                     onClick = { context.openNotificationSettings(settingsPageLauncher::launch) }
                 )
                 SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.BatterySaver,
                     title = "电池优化白名单",
                     valueText = if (batteryOptimizationIgnored) "已加入" else "未加入",
                     valueColor = if (batteryOptimizationIgnored) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                     onClick = { context.openBatteryOptimizationSettings(settingsPageLauncher::launch) }
                 )
                 SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Settings,
                     title = "后台运行限制",
                     valueText = if (backgroundRestricted) "受限" else "正常",
                     valueColor = if (backgroundRestricted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     onClick = { context.openAutoStartSettings(settingsPageLauncher::launch) }
                 )
-                Text(
+                SettingsInfoTextRow(
+                    leadingIcon = Icons.Outlined.Info,
                     text = "提示：不同厂商的后台和自启动入口位置不同，若未跳到目标页可在系统设置中手动搜索。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    textStyle = MaterialTheme.typography.bodySmall
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text(
-                    text = "距离上课还有：${uiState.settings.reminderMinutes} 分钟",
-                    style = MaterialTheme.typography.bodyMedium
+                SettingsValueRow(
+                    leadingIcon = Icons.Outlined.Schedule,
+                    title = "距离上课还有",
+                    valueText = "${uiState.settings.reminderMinutes} 分钟"
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(5, 10, 15, 30).forEach { minutes ->
+                // Keep quick-select chips in one horizontal line across screen sizes.
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(5, 10, 15, 20, 30).forEach { minutes ->
                         FilterChip(
                             selected = uiState.settings.reminderMinutes == minutes,
                             onClick = { viewModel.setReminderMinutes(minutes) },
@@ -264,6 +303,7 @@ fun SettingsScreen(
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 SettingsSwitchRow(
+                    leadingIcon = Icons.Outlined.AutoAwesome,
                     title = "启用灵动岛通知（未实现）",
                     checked = uiState.settings.fluidCloudEnabled,
                     enabled = false,
@@ -272,7 +312,11 @@ fun SettingsScreen(
             }
 
             SettingsSectionCard(title = "外观") {
-                Text("主题模式", style = MaterialTheme.typography.bodyMedium)
+                SettingsInfoTextRow(
+                    leadingIcon = Icons.Outlined.Palette,
+                    text = "主题模式",
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ThemeMode.entries.forEach { mode ->
                         FilterChip(
@@ -292,14 +336,16 @@ fun SettingsScreen(
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 SettingsSwitchRow(
+                    leadingIcon = Icons.Outlined.ColorLens,
                     title = "启用动态取色",
                     checked = uiState.settings.dynamicColorEnabled,
                     onCheckedChange = viewModel::setDynamicColorEnabled
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text(
-                    text = "课程卡片高度：${uiState.settings.courseCellHeightDp} dp",
-                    style = MaterialTheme.typography.bodyMedium
+                SettingsValueRow(
+                    leadingIcon = Icons.Outlined.Height,
+                    title = "课程卡片高度",
+                    valueText = "${uiState.settings.courseCellHeightDp} dp"
                 )
                 Slider(
                     value = uiState.settings.courseCellHeightDp.toFloat(),
@@ -308,6 +354,7 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 SettingsSwitchRow(
+                    leadingIcon = Icons.Outlined.ViewWeek,
                     title = "显示非本周课程",
                     checked = uiState.settings.showNonCurrentWeekCourses,
                     onCheckedChange = viewModel::setShowNonCurrentWeekCourses
@@ -315,9 +362,10 @@ fun SettingsScreen(
             }
 
             SettingsSectionCard(title = "数据") {
-                Text(
+                SettingsInfoTextRow(
+                    leadingIcon = Icons.Outlined.Backup,
                     text = "设置备份仅包含应用偏好配置。",
-                    style = MaterialTheme.typography.bodyMedium
+                    textStyle = MaterialTheme.typography.bodyMedium
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*")) }) {
@@ -330,21 +378,37 @@ fun SettingsScreen(
             }
 
             SettingsSectionCard(title = "更新") {
+                val updateError = uiState.settings.lastUpdateCheckError
                 SettingsSwitchRow(
+                    leadingIcon = Icons.Outlined.Update,
                     title = "自动检查更新",
                     checked = uiState.settings.autoCheckUpdateEnabled,
                     onCheckedChange = viewModel::setAutoCheckUpdateEnabled
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text(
-                    text = when {
+                SettingsValueRow(
+                    leadingIcon = Icons.Outlined.SystemUpdate,
+                    title = "更新状态",
+                    valueText = when {
                         uiState.settings.lastUpdateCheckAtMillis <= 0L -> "尚未检查更新"
                         uiState.settings.updateAvailable -> "发现新版本：${uiState.settings.latestRemoteVersion}"
-                        uiState.settings.lastUpdateCheckError.isNotBlank() -> "上次检查失败：${uiState.settings.lastUpdateCheckError}"
+                        updateError.isNotBlank() -> "上次检查失败"
                         else -> "当前已是最新版本"
-                    },
-                    style = MaterialTheme.typography.bodyMedium
+                    }
                 )
+                if (updateError.isNotBlank()) {
+                    SettingsCopyableMessageRow(
+                        leadingIcon = Icons.Outlined.Info,
+                        title = "错误详情",
+                        valueText = updateError,
+                        onCopyClick = {
+                            clipboardManager.setText(AnnotatedString(updateError))
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("已复制更新报错信息")
+                            }
+                        }
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(
                         onClick = viewModel::checkForUpdates,
@@ -372,6 +436,29 @@ fun SettingsScreen(
                         Text("下载更新")
                     }
                 }
+            }
+
+            SettingsSectionCard(title = "关于") {
+                SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Language,
+                    title = "项目网站",
+                    valueText = "sleepin.kurosu.qzz.io",
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    onClick = { context.openUrl("https://sleepin.kurosu.qzz.io/") }
+                )
+                SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Code,
+                    title = "GitHub",
+                    valueText = "Kurosu-Ti01/SleepIn",
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    onClick = { context.openUrl("https://github.com/Kurosu-Ti01/SleepIn") }
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsValueRow(
+                    leadingIcon = Icons.Outlined.Info,
+                    title = "当前版本",
+                    valueText = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+                )
             }
         }
     }
@@ -429,6 +516,7 @@ private fun SettingsSectionCard(
  */
 @Composable
 private fun SettingsSwitchRow(
+    leadingIcon: ImageVector,
     title: String,
     checked: Boolean,
     enabled: Boolean = true,
@@ -436,9 +524,20 @@ private fun SettingsSwitchRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = title, style = MaterialTheme.typography.bodyMedium)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(text = title, style = MaterialTheme.typography.bodyMedium)
+        }
         Switch(
             checked = checked,
             enabled = enabled,
@@ -452,6 +551,7 @@ private fun SettingsSwitchRow(
  */
 @Composable
 private fun SettingsClickableRow(
+    leadingIcon: ImageVector,
     title: String,
     valueText: String,
     valueColor: Color,
@@ -463,18 +563,147 @@ private fun SettingsClickableRow(
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp, horizontal = 4.dp), // Increase padding for better touch target
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = title, style = MaterialTheme.typography.bodyMedium)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(text = title, style = MaterialTheme.typography.bodyMedium)
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(text = valueText, style = MaterialTheme.typography.bodySmall, color = valueColor)
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "跳转",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * Reusable settings row that displays read-only information.
+ */
+@Composable
+private fun SettingsValueRow(
+    leadingIcon: ImageVector,
+    title: String,
+    valueText: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(text = title, style = MaterialTheme.typography.bodyMedium)
+        }
+        Text(
+            text = valueText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * Reusable text row with leading icon for non-interactive setting descriptions.
+ */
+@Composable
+private fun SettingsInfoTextRow(
+    leadingIcon: ImageVector,
+    text: String,
+    textStyle: androidx.compose.ui.text.TextStyle
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = leadingIcon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = text,
+            style = textStyle,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * Displays a selectable error message with an explicit copy action.
+ */
+@Composable
+private fun SettingsCopyableMessageRow(
+    leadingIcon: ImageVector,
+    title: String,
+    valueText: String,
+    onCopyClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            IconButton(onClick = onCopyClick) {
+                Icon(
+                    imageVector = Icons.Outlined.ContentCopy,
+                    contentDescription = "复制错误详情",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        SelectionContainer {
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 32.dp)
             )
         }
     }
@@ -493,6 +722,13 @@ private fun Context.writeTextToUri(uri: Uri, content: String) {
     contentResolver.openOutputStream(uri, "w")?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
         writer.write(content)
     }
+}
+
+/**
+ * Opens a URL in browser apps and silently ignores unsupported targets.
+ */
+private fun Context.openUrl(url: String): Boolean {
+    return tryDirectStartActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 }
 
 /**
