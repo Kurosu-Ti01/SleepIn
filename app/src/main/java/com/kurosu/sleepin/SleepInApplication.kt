@@ -2,6 +2,7 @@ package com.kurosu.sleepin
 
 import android.app.Application
 import androidx.room.InvalidationTracker
+import androidx.glance.appwidget.updateAll
 import com.kurosu.sleepin.data.preferences.settingsDataStore
 import com.kurosu.sleepin.di.DatabaseModule
 import com.kurosu.sleepin.di.RepositoryModule
@@ -36,7 +37,9 @@ import com.kurosu.sleepin.domain.usecase.settings.PerformUpdateCheckUseCase
 import com.kurosu.sleepin.domain.usecase.settings.UpdateSettingsUseCase
 import com.kurosu.sleepin.reminder.CourseReminderScheduler
 import com.kurosu.sleepin.update.UpdateCheckScheduler
+import com.kurosu.sleepin.widget.TodayWidget
 import com.kurosu.sleepin.widget.WidgetRefreshScheduler
+import com.kurosu.sleepin.widget.WeekWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -189,7 +192,21 @@ class SleepInApplication : Application() {
      */
     private fun scheduleWidgetRefreshPipeline() {
         WidgetRefreshScheduler.schedulePeriodic(this)
-        WidgetRefreshScheduler.requestImmediateUpdate(this)
+        refreshWidgetsNow()
+    }
+
+    /**
+     * Runs an in-process widget refresh immediately.
+     *
+     * Compared with WorkManager one-time work, this path updates launcher widgets in the same
+     * process tick right after local database writes, so timetable switch and course edits feel
+     * instant to users.
+     */
+    private fun refreshWidgetsNow() {
+        appScope.launch {
+            TodayWidget.updateAll(this@SleepInApplication)
+            WeekWidget.updateAll(this@SleepInApplication)
+        }
     }
 
     /**
@@ -241,7 +258,7 @@ class SleepInApplication : Application() {
                 "schedule_periods"
             ) {
                 override fun onInvalidated(tables: Set<String>) {
-                    WidgetRefreshScheduler.requestImmediateUpdate(this@SleepInApplication)
+                    refreshWidgetsNow()
                     // Recompute exact alarm immediately so edited classes keep strict trigger timing.
                     appScope.launch {
                         CourseReminderScheduler.scheduleNextExactAlarm(this@SleepInApplication)

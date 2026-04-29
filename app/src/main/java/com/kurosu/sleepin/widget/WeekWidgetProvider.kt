@@ -187,5 +187,7 @@ private fun withAlpha(argb: Int, alpha: Float): Int {
     return (argb and 0x00FFFFFF) or (normalizedAlpha shl 24)
 }
 
-private fun singleColor(argb: Int): ColorProvider =
-    ColorProvider(color = Color(argb))
+private fun singleColor(argb: Int): ColorProvider {
+    val color = Color(argb)
+    return ColorProvider(color)
+}
