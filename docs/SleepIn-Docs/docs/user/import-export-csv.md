@@ -69,7 +69,8 @@ permalink: /user/import-export-csv/
 
 > **注意**：
 > - SleepIn 通过列名来识别数据，因此请确保列名与上述表格中的列名完全一致，而不需要注意先后顺序。
-> - 请确保 CSV 文件的编码格式为 UTF-8。如使用 Excel 另存为 CSV 时，默认编码可能不是 UTF-8，建议使用文本编辑器打开 CSV 文件并转换编码为 UTF-8 后再导入。
+> - 导入支持 `UTF-8`，并兼容常见中文编码（`GB18030`、`GBK`、`GB2312`、`Big5`，以及带 BOM 的 UTF-16）。
+> - 导出仍使用 `UTF-8`（含 BOM），建议优先保留该编码以获得最佳兼容性。
 
 > 另外，课程表 CSV 也兼容英文表头：`CourseName`、`Teacher`、`Location`、`DayOfWeek`、`StartPeriod`、`EndPeriod`、`Weeks`。
 

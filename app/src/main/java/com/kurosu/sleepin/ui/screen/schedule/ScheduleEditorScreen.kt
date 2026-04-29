@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kurosu.sleepin.data.csv.CsvImportTextDecoder
 
 /**
  * Full-screen schedule editor UI.
@@ -67,7 +68,7 @@ fun ScheduleEditorScreen(
     val importCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        val text = uri?.let { context.readTextFromUri(it) }
+        val text = uri?.let { context.readScheduleCsvTextFromUri(it) }
         if (!text.isNullOrBlank()) {
             viewModel.importCsvForCreate(text)
         }
@@ -310,9 +311,11 @@ fun rememberScheduleEditorViewModel(
     )
 )
 
-/** Reads UTF-8 text from a Storage Access Framework Uri. */
-private fun Context.readTextFromUri(uri: Uri): String? =
-    contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+/** Reads schedule CSV text with UTF-8-first and Chinese-encoding fallback. */
+private fun Context.readScheduleCsvTextFromUri(uri: Uri): String? =
+    contentResolver.openInputStream(uri)?.use { stream ->
+        CsvImportTextDecoder.decodeScheduleCsv(stream.readBytes())
+    }
 
 /** Writes UTF-8 text to a Storage Access Framework Uri. */
 private fun Context.writeTextToUri(uri: Uri, content: String) {

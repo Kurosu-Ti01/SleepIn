@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kurosu.sleepin.data.csv.CsvImportTextDecoder
 
 /**
  * Timetable editor screen used for both create and edit flows.
@@ -59,12 +60,12 @@ fun TimetableEditorScreen(
     var scheduleExpanded by remember { mutableStateOf(false) }
     var pendingExportText by remember { mutableStateOf<String?>(null) }
 
-    // CSV import picker is used only in create mode. The selected file is read as UTF-8 text
-    // and delegated to ViewModel so domain-level parser/validator remains centralized.
+    // CSV import picker is used only in create mode. File text is decoded with UTF-8 priority
+    // and Chinese-encoding fallback before being delegated to the ViewModel parser.
     val importCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        val text = uri?.let { context.readTextFromUri(it) }
+        val text = uri?.let { context.readTimetableCsvTextFromUri(it) }
         if (!text.isNullOrBlank()) {
             viewModel.createAndImportCsv(text)
         }
@@ -313,10 +314,12 @@ fun rememberTimetableEditorViewModel(
 )
 
 /**
- * Reads UTF-8 text from a Storage Access Framework Uri.
+ * Reads timetable CSV text with UTF-8-first and Chinese-encoding fallback.
  */
-private fun Context.readTextFromUri(uri: Uri): String? =
-    contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+private fun Context.readTimetableCsvTextFromUri(uri: Uri): String? =
+    contentResolver.openInputStream(uri)?.use { stream ->
+        CsvImportTextDecoder.decodeTimetableCsv(stream.readBytes())
+    }
 
 /**
  * Writes UTF-8 text to a Storage Access Framework Uri.
