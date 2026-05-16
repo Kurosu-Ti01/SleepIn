@@ -19,7 +19,7 @@ android {
             isEnable = true
             reset()
             include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = true // true 会额外生成一个通用包
+            isUniversalApk = true
         }
     }
 
@@ -27,8 +27,8 @@ android {
         applicationId = "com.kurosu.sleepin"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
