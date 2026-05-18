@@ -10,8 +10,8 @@
         <p v-if="content.localeNotice" class="locale-note">{{ content.localeNotice }}</p>
 
         <div class="actions">
-          <a :href="links.start" class="action-btn brand">{{ content.startBtn }}</a>
-          <a :href="links.download" class="action-btn alt">{{ content.downloadBtn }}</a>
+          <a :href="links.start" class="action-btn alt">{{ content.startBtn }}</a>
+          <a :href="links.download" class="action-btn brand">{{ content.downloadBtn }}</a>
           <a :href="links.dev" class="action-btn alt">{{ content.devBtn }}</a>
         </div>
       </div>
@@ -66,7 +66,7 @@
       tagline: '更实用 · 更简洁 · 更美观',
       description: '一个开源轻量的 Android 课程表。',
       localeNotice: '',
-      startBtn: '开始使用',
+      startBtn: '使用文档',
       downloadBtn: '下载最新版本',
       devBtn: '开发文档',
       features: [
