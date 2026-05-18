@@ -36,10 +36,16 @@ SleepIn 是一个开源、轻量、美观的 Android 课程表应用，旨在提
 
 ## 📷 截图预览
 
-<div style="display: flex; gap: 1rem; width: 100%; justify-content: center;">
-  <img src="./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsLight01.jpg" style="flex: 1; max-width: 50%;" alt="Light01">
-  <img src="./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsDark01.jpg" style="flex: 1; max-width: 50%;" alt="Dark01">
-</div>
+<table style="width: 100%;">
+  <tr>
+    <td style="width: 50%; text-align: center;">
+      <img src="./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsLight01.jpg" style="width: 100%; max-width: 480px;" alt="Light01">
+    </td>
+    <td style="width: 50%; text-align: center;">
+      <img src="./docs/SleepIn-Docs/docs/.vuepress/public/ScreenshotsDark01.jpg" style="width: 100%; max-width: 480px;" alt="Dark01">
+    </td>
+  </tr>
+</table>
 
 <!-- <details open="True">
   <summary>Light</summary>

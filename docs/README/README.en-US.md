@@ -36,7 +36,19 @@ Some basic features that have been implemented so far:
 
 ## 📷 Screenshots
 
-<details open="True">
+<table style="width: 100%;">
+  <tr>
+    <td style="width: 50%; text-align: center;">
+      <img src="../SleepIn-Docs/docs/.vuepress/public/ScreenshotsLight01.jpg" style="width: 100%; max-width: 480px;" alt="Light01">
+    </td>
+    <td style="width: 50%; text-align: center;">
+      <img src="../SleepIn-Docs/docs/.vuepress/public/ScreenshotsDark01.jpg" style="width: 100%; max-width: 480px;" alt="Dark01">
+    </td>
+  </tr>
+</table>
+
+
+<!-- <details open="True">
   <summary>Light</summary>
 
   ![Light01](../SleepIn-Docs/docs/.vuepress/public/ScreenshotsLight01.jpg)
@@ -48,7 +60,7 @@ Some basic features that have been implemented so far:
 
   ![Dark01](../SleepIn-Docs/docs/.vuepress/public/ScreenshotsDark01.jpg))
 
-</details>
+</details> -->
 
 ## 🌏 Internationalization
 
