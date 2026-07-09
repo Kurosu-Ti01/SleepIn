@@ -13,7 +13,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -230,16 +229,6 @@ fun CourseEditorScreen(
                 OutlinedButton(onClick = viewModel::addSession) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Text("添加时间段", modifier = Modifier.padding(start = 4.dp))
-                }
-            }
-
-            item {
-                Button(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = viewModel::save,
-                    enabled = !uiState.isSaving
-                ) {
-                    Text(if (uiState.isSaving) "保存中..." else "保存课程")
                 }
             }
         }

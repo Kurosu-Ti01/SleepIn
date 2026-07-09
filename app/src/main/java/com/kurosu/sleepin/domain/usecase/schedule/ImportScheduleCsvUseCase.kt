@@ -12,7 +12,14 @@ class ImportScheduleCsvUseCase(
     private val saveScheduleUseCase: SaveScheduleUseCase
 ) {
 
-    suspend operator fun invoke(rawCsv: String): ScheduleCsvImportReport = withContext(Dispatchers.IO) {
+    /**
+     * Parses [rawCsv] and creates a new schedule from it.
+     *
+     * @param nameOverride optional schedule name typed by the user in the editor form;
+     * when non-blank it takes precedence over the name column inside the CSV so users
+     * do not lose the name they already entered before importing.
+     */
+    suspend operator fun invoke(rawCsv: String, nameOverride: String? = null): ScheduleCsvImportReport = withContext(Dispatchers.IO) {
         val parsed = importer.parse(rawCsv)
         if (parsed.errors.isNotEmpty() || parsed.rows.isEmpty()) {
             return@withContext ScheduleCsvImportReport(
@@ -22,7 +29,7 @@ class ImportScheduleCsvUseCase(
             )
         }
 
-        val scheduleName = parsed.rows.first().scheduleName
+        val scheduleName = nameOverride?.takeIf { it.isNotBlank() } ?: parsed.rows.first().scheduleName
         val periodDrafts = parsed.rows
             .sortedBy { it.periodNumber }
             .map { row ->

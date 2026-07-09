@@ -30,7 +30,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,8 +37,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -57,6 +59,7 @@ fun TimetableEditorScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     var scheduleExpanded by remember { mutableStateOf(false) }
     var pendingExportText by remember { mutableStateOf<String?>(null) }
 
@@ -103,14 +106,46 @@ fun TimetableEditorScreen(
         viewModel.consumeMessage()
     }
 
+    // Import failure detail: selectable text plus an explicit copy action so users can
+    // share or inspect parser errors outside the app.
     uiState.csvImportErrorDetail?.let { detail ->
         AlertDialog(
             onDismissRequest = viewModel::consumeCsvImportErrorDetail,
             title = { Text("CSV 导入错误详情") },
-            text = { Text(detail) },
+            text = { SelectionContainer { Text(detail) } },
             confirmButton = {
                 TextButton(onClick = viewModel::consumeCsvImportErrorDetail) {
                     Text("我知道了")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { clipboardManager.setText(AnnotatedString(detail)) }) {
+                    Text("复制")
+                }
+            }
+        )
+    }
+
+    // Confirm before opening the file picker: a successful import saves the timetable
+    // immediately, so the user must acknowledge that up front.
+    if (uiState.showCsvImportConfirm) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissCsvImportConfirm,
+            title = { Text("导入 CSV 并保存") },
+            text = { Text("导入成功后将直接创建并保存该课程表。是否继续选择 CSV 文件？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.dismissCsvImportConfirm()
+                        importCsvLauncher.launch(arrayOf("text/csv", "text/*"))
+                    }
+                ) {
+                    Text("继续")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissCsvImportConfirm) {
+                    Text("取消")
                 }
             }
         )
@@ -126,6 +161,7 @@ fun TimetableEditorScreen(
                     }
                 },
                 actions = {
+                    // Edit mode exports the existing timetable; create mode imports one from CSV.
                     if (uiState.isEditMode) {
                         TextButton(
                             onClick = viewModel::exportCsvForEditingTimetable,
@@ -133,8 +169,18 @@ fun TimetableEditorScreen(
                         ) {
                             Text(if (uiState.isCsvBusy) "导出中..." else "导出CSV")
                         }
+                    } else {
+                        TextButton(
+                            onClick = viewModel::onImportCsvClick,
+                            enabled = !uiState.isSaving && !uiState.isCsvBusy
+                        ) {
+                            Text(if (uiState.isCsvBusy) "导入中..." else "导入CSV")
+                        }
                     }
-                    TextButton(onClick = viewModel::save, enabled = !uiState.isSaving) {
+                    TextButton(
+                        onClick = viewModel::save,
+                        enabled = !uiState.isSaving && !uiState.isCsvBusy
+                    ) {
                         Text(if (uiState.isSaving) "保存中..." else "保存")
                     }
                 }
@@ -188,7 +234,7 @@ fun TimetableEditorScreen(
                     value = uiState.startDateText,
                     onValueChange = viewModel::onStartDateChange,
                     label = { Text("开学日期") },
-                    supportingText = { Text("Use ISO date format: yyyy-MM-dd") },
+                    supportingText = { Text("使用 ISO 日期格式: yyyy-MM-dd") },
                     singleLine = true
                 )
             }
@@ -250,36 +296,6 @@ fun TimetableEditorScreen(
                     text = "保存后可在课程表列表中设为当前激活课程表。",
                     style = MaterialTheme.typography.bodySmall
                 )
-            }
-
-            item {
-                Button(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = viewModel::save,
-                    enabled = !uiState.isSaving && !uiState.isCsvBusy
-                ) {
-                    Text(if (uiState.isSaving) "保存中..." else "保存课程表")
-                }
-            }
-
-            item {
-                if (uiState.isEditMode) {
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = viewModel::exportCsvForEditingTimetable,
-                        enabled = !uiState.isSaving && !uiState.isCsvBusy
-                    ) {
-                        Text(if (uiState.isCsvBusy) "导出中..." else "导出至CSV")
-                    }
-                } else {
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { importCsvLauncher.launch(arrayOf("text/csv", "text/*")) },
-                        enabled = !uiState.isSaving && !uiState.isCsvBusy
-                    ) {
-                        Text(if (uiState.isCsvBusy) "导入中..." else "保存并导入CSV")
-                    }
-                }
             }
         }
     }

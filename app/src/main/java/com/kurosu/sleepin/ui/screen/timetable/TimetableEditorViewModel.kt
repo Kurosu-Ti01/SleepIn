@@ -45,6 +45,9 @@ data class TimetableEditorUiState(
     val selectedScheduleId: Long? = null,
     val message: String? = null,
     val csvImportErrorDetail: String? = null,
+    // When true the screen shows a confirmation dialog explaining that a successful
+    // CSV import immediately creates and saves the timetable.
+    val showCsvImportConfirm: Boolean = false,
     val isEditMode: Boolean = false
 )
 
@@ -118,6 +121,39 @@ class TimetableEditorViewModel(
     }
 
     /**
+     * Entry point of the create-mode CSV import flow.
+     *
+     * Validates that all timetable form fields are complete before asking the screen to
+     * show a confirmation dialog, because a successful import creates and saves the
+     * timetable immediately — the user must be aware of that before picking a file.
+     */
+    fun onImportCsvClick() {
+        if (timetableId != null) {
+            emitMessage("仅支持在新建课程表时导入 CSV")
+            return
+        }
+        val state = _uiState.value
+        if (state.name.isBlank()) {
+            return emitMessage("请先填写课程表信息，导入成功后将直接保存")
+        }
+        if (state.totalWeeks.toIntOrNull() == null) {
+            return emitMessage("总周数必须是整数")
+        }
+        if (runCatching { LocalDate.parse(state.startDateText.trim()) }.getOrNull() == null) {
+            return emitMessage("开学日期格式应为 yyyy-MM-dd")
+        }
+        if (state.selectedScheduleId == null) {
+            return emitMessage("请选择作息表")
+        }
+        _uiState.update { it.copy(showCsvImportConfirm = true) }
+    }
+
+    /** Dismisses the CSV import confirmation dialog without importing. */
+    fun dismissCsvImportConfirm() {
+        _uiState.update { it.copy(showCsvImportConfirm = false) }
+    }
+
+    /**
      * Creates a brand-new timetable and immediately imports courses from a CSV payload.
      *
      * Why this flow exists:
@@ -175,38 +211,38 @@ class TimetableEditorViewModel(
                         rawCsv = rawCsv
                     )
 
-                    // Avoid leaving a meaningless empty timetable when import produced no sessions.
-                    if (report.importedSessionCount == 0) {
+                    // Import is all-or-nothing from the user's perspective: any parse error or
+                    // an empty result rolls back the just-created timetable so the user can fix
+                    // the CSV and retry without leaving duplicates behind. Form input is kept in
+                    // UI state, so the create screen stays filled in.
+                    val isFullSuccess = report.importedSessionCount > 0 && report.errors.isEmpty()
+                    if (!isFullSuccess) {
                         deleteTimetableUseCase(createResult.timetableId)
                     }
-
-                    val isEmptyImport = report.importedSessionCount == 0
 
                     _uiState.update {
                         it.copy(
                             isSaving = false,
                             isCsvBusy = false,
-                            message = if (isEmptyImport) {
-                                "未导入任何课时，已取消创建课程表"
-                            } else {
+                            message = if (isFullSuccess) {
                                 buildString {
                                     append("导入完成：")
                                     append(report.importedCourseCount)
                                     append(" 门课程，")
                                     append(report.importedSessionCount)
                                     append(" 条课时")
-                                    if (report.errors.isNotEmpty()) {
-                                        append("，")
-                                        append(report.errors.size)
-                                        append(" 行失败")
-                                    }
                                 }
+                            } else if (report.importedSessionCount == 0) {
+                                "未导入任何课时，已取消创建课程表"
+                            } else {
+                                "CSV 存在 ${report.errors.size} 行错误，已取消创建课程表，请修正后重试"
                             },
                             csvImportErrorDetail = buildCsvImportErrorDetail(report)
                         )
                     }
-                    // Keep user on this page when any row fails so the detail dialog can be read.
-                    if (!isEmptyImport && report.errors.isEmpty()) {
+                    // Leave the editor only when everything imported cleanly; otherwise stay so
+                    // the error dialog can be read and the retained inputs reused for a retry.
+                    if (isFullSuccess) {
                         _events.emit(TimetableEditorEvent.Saved)
                     }
                 }

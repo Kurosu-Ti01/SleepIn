@@ -49,6 +49,9 @@ data class ScheduleEditorUiState(
     // One-shot message consumed by the screen snackbar.
     val message: String? = null,
     val csvImportErrorDetail: String? = null,
+    // When true the screen shows a confirmation dialog explaining that a successful
+    // CSV import immediately creates and saves the schedule.
+    val showCsvImportConfirm: Boolean = false,
     val isEditMode: Boolean = false
 )
 
@@ -217,7 +220,35 @@ class ScheduleEditorViewModel(
     }
 
     /**
+     * Entry point of the create-mode CSV import flow.
+     *
+     * Validates that the form information (schedule name) is complete before asking the
+     * screen to show a confirmation dialog, because a successful import saves immediately
+     * and leaves the editor — the user must be aware of that before picking a file.
+     */
+    fun onImportCsvClick() {
+        if (scheduleId != null) {
+            emitMessage("仅支持在新建作息表时导入 CSV")
+            return
+        }
+        if (_uiState.value.name.isBlank()) {
+            emitMessage("请先填写作息表名称，导入成功后将直接保存")
+            return
+        }
+        _uiState.update { it.copy(showCsvImportConfirm = true) }
+    }
+
+    /** Dismisses the CSV import confirmation dialog without importing. */
+    fun dismissCsvImportConfirm() {
+        _uiState.update { it.copy(showCsvImportConfirm = false) }
+    }
+
+    /**
      * Imports one CSV file and creates a brand-new schedule from it.
+     *
+     * The name typed in the editor form overrides the name column in the CSV so the
+     * user's input is honored. On failure nothing is persisted and the user stays on
+     * the create screen with all form fields intact.
      */
     fun importCsvForCreate(rawCsv: String) {
         if (scheduleId != null) {
@@ -227,7 +258,7 @@ class ScheduleEditorViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isCsvBusy = true) }
-            val report = importScheduleCsvUseCase(rawCsv)
+            val report = importScheduleCsvUseCase(rawCsv, nameOverride = _uiState.value.name)
             val hasImported = report.importedScheduleId != null && report.importedPeriodCount > 0
 
             _uiState.update {

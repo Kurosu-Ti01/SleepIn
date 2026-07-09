@@ -5,7 +5,9 @@
       "Bash(./gradlew assembleDebug -q)",
       "Bash(adb devices *)",
       "Bash(./gradlew :app:compileDebugKotlin)",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Bash(./gradlew assembleDebug testDebugUnitTest)",
+      "Bash(./gradlew assembleDebug)"
     ]
   }
 }
