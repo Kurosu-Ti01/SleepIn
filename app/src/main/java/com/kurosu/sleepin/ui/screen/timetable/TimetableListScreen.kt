@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -37,6 +39,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kurosu.sleepin.ui.component.EmptyStatePlaceholder
 
 /**
  * Timetable list screen for Phase 3.
@@ -83,15 +86,15 @@ fun TimetableListScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         if (uiState.items.isEmpty() && !uiState.isLoading) {
-            Column(
+            EmptyStatePlaceholder(
+                icon = Icons.AutoMirrored.Outlined.EventNote,
+                title = "暂无课程表",
+                subtitle = "点击右下角按钮创建",
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text("暂无课程表，点击右下角按钮创建", style = MaterialTheme.typography.bodyLarge)
-            }
+                    .padding(16.dp)
+            )
             return@Scaffold
         }
 
@@ -103,10 +106,15 @@ fun TimetableListScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(uiState.items, key = { it.id }) { item ->
+                // Soft one-step tonal container instead of the heavy filled-card default gray.
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onOpenCoursesClick(item.id) }
+                        .clickable { onOpenCoursesClick(item.id) },
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(12.dp),

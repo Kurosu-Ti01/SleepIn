@@ -15,8 +15,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -38,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kurosu.sleepin.ui.component.EmptyStatePlaceholder
 
 /**
  * Lists all courses under one timetable and exposes edit/delete/create actions.
@@ -79,15 +82,15 @@ fun CourseListScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         if (uiState.items.isEmpty() && !uiState.isLoading) {
-            Column(
+            EmptyStatePlaceholder(
+                icon = Icons.Outlined.MenuBook,
+                title = "暂无课程",
+                subtitle = "点击右下角按钮添加",
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text("暂无课程，点击右下角按钮添加", style = MaterialTheme.typography.bodyLarge)
-            }
+                    .padding(16.dp)
+            )
             return@Scaffold
         }
 
@@ -99,7 +102,14 @@ fun CourseListScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(uiState.items, key = { it.id }) { item ->
-                Card(modifier = Modifier.fillMaxWidth()) {
+                // Soft one-step tonal container instead of the heavy filled-card default gray.
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                ) {
                     Column(
                         modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)

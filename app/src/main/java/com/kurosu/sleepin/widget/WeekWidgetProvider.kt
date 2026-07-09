@@ -87,12 +87,7 @@ private fun WeekWidgetContent(snapshot: WidgetSnapshot) {
     ) {
         when (snapshot) {
             WidgetSnapshot.NoActiveTimetable -> {
-                Text(
-                    text = "Week",
-                    style = TextStyle(fontWeight = FontWeight.Bold, color = singleColor(palette.onSurface))
-                )
-                Spacer(modifier = GlanceModifier.height(8.dp))
-                Text(text = "No active timetable", style = TextStyle(color = singleColor(palette.onSurfaceMuted)))
+                NoActiveTimetableContent(palette)
             }
 
             is WidgetSnapshot.Content -> {

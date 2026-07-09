@@ -269,7 +269,7 @@ fun TimetableEditorScreen(
                         onClick = viewModel::exportCsvForEditingTimetable,
                         enabled = !uiState.isSaving && !uiState.isCsvBusy
                     ) {
-                        Text(if (uiState.isCsvBusy) "导出中..." else "导出当前课程表CSV")
+                        Text(if (uiState.isCsvBusy) "导出中..." else "导出至CSV")
                     }
                 } else {
                     Button(

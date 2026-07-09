@@ -235,16 +235,7 @@ private fun TodayWidgetContent(snapshot: WidgetSnapshot, glanceIdTag: String) {
     ) {
         when (snapshot) {
             WidgetSnapshot.NoActiveTimetable -> {
-                Text(
-                    text = "Today",
-                    style = TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        color = singleColor(palette.onSurface)
-                    )
-                )
-                Spacer(modifier = GlanceModifier.height(8.dp))
-                Text(text = "No active timetable", style = TextStyle(color = singleColor(palette.onSurfaceMuted)))
-                Text(text = "Open SleepIn to choose one", style = TextStyle(color = singleColor(palette.onSurfaceMuted)))
+                NoActiveTimetableContent(palette)
             }
 
             is WidgetSnapshot.Content -> {

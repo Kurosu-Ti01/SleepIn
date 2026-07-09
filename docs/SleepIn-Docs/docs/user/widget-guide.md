@@ -5,7 +5,7 @@ permalink: /user/widget-guide/
 ---
 # 桌面小组件
 
-目前 SleepIn 仅支持 Android 原生的 Window 小组件。各手机厂商的桌面小组件实现可能存在差异，需要未来为不同厂商适配不同的小组件类型。
+目前 SleepIn 仅支持 Android 原生的 Widget 小组件。各手机厂商的桌面小组件实现可能存在差异，需要未来为不同厂商适配不同的小组件类型。
 
 ## 1. 支持的小组件类型
 

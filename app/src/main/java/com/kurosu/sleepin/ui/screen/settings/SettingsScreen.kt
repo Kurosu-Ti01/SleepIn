@@ -4,7 +4,9 @@ import android.Manifest
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.AlarmManager
+import android.appwidget.AppWidgetManager
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -43,10 +45,13 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.ViewWeek
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -88,6 +93,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kurosu.sleepin.BuildConfig
 import com.kurosu.sleepin.domain.model.ThemeMode
 import com.kurosu.sleepin.update.ApkDownloadManager
+import com.kurosu.sleepin.widget.TodayWidgetReceiver
+import com.kurosu.sleepin.widget.WeekWidgetReceiver
 import kotlinx.coroutines.launch
 
 /**
@@ -361,6 +368,38 @@ fun SettingsScreen(
                 )
             }
 
+            SettingsSectionCard(title = "小组件") {
+                // Snackbar text shared by both pin rows when the launcher rejects pin requests.
+                val pinUnsupportedMessage =
+                    "当前桌面不支持一键添加，请长按桌面空白处，在小组件列表中手动添加"
+
+                /**
+                 * Requests pinning [receiverClass] and surfaces a manual-add hint on failure.
+                 * Runs on click; snackbar emission goes through the screen-level coroutine scope.
+                 */
+                fun requestPin(receiverClass: Class<*>) {
+                    if (!context.requestPinWidgetToHomeScreen(receiverClass)) {
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(pinUnsupportedMessage)
+                        }
+                    }
+                }
+                SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Today,
+                    title = "今日课程小组件",
+                    valueText = "添加到桌面",
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    onClick = { requestPin(TodayWidgetReceiver::class.java) }
+                )
+                SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.ViewWeek,
+                    title = "周课表小组件",
+                    valueText = "添加到桌面",
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    onClick = { requestPin(WeekWidgetReceiver::class.java) }
+                )
+            }
+
             SettingsSectionCard(title = "数据") {
                 SettingsInfoTextRow(
                     leadingIcon = Icons.Outlined.Backup,
@@ -492,20 +531,35 @@ fun SettingsScreen(
 
 /**
  * Section card wrapper used to keep the settings page visually grouped and scan-friendly.
+ *
+ * Uses [MaterialTheme.colorScheme.surfaceContainerLow] instead of the filled-card default
+ * (surfaceContainerHighest): the default reads as a heavy gray block against the page
+ * background, while the low tier gives a subtle one-step tonal lift that stays soft in
+ * both light and dark themes and with dynamic color.
  */
 @Composable
 private fun SettingsSectionCard(
     title: String,
     content: @Composable () -> Unit
 ) {
-    Card {
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            // Primary-tinted section label is the conventional M3 settings grouping cue.
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
             content()
         }
     }
@@ -706,6 +760,32 @@ private fun SettingsCopyableMessageRow(
                 modifier = Modifier.padding(start = 32.dp)
             )
         }
+    }
+}
+
+/**
+ * Asks the launcher to show the system "add widget to home screen" confirmation dialog
+ * for the app widget backed by [receiverClass].
+ *
+ * Uses [AppWidgetManager.requestPinAppWidget] (available since API 26, which matches minSdk).
+ * Whether the dialog appears is up to the default launcher: many third-party or older
+ * launchers do not support pinning, in which case this returns false and callers should
+ * guide users to add the widget manually from the launcher's widget picker.
+ *
+ * @param receiverClass the exported AppWidget receiver class declared in the manifest
+ * @return true if the pin request was accepted by the system, false when the launcher
+ *         does not support pinning or the request was rejected
+ */
+private fun Context.requestPinWidgetToHomeScreen(receiverClass: Class<*>): Boolean {
+    val appWidgetManager = getSystemService(AppWidgetManager::class.java) ?: return false
+    if (!appWidgetManager.isRequestPinAppWidgetSupported) return false
+    return try {
+        appWidgetManager.requestPinAppWidget(ComponentName(this, receiverClass), null, null)
+    } catch (_: IllegalStateException) {
+        // Some ROMs throw instead of returning false when pinning is unavailable.
+        false
+    } catch (_: SecurityException) {
+        false
     }
 }
 

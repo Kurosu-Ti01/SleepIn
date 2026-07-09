@@ -135,7 +135,7 @@ class WidgetCourseSnapshotProvider(
 
             val weekdayLabel = weekdayShortLabel(dayIndex)
             val summary = when {
-                daySessions.isEmpty() -> "No classes"
+                daySessions.isEmpty() -> "无课"
                 else -> {
                     val first = daySessions.first()
                     val extraCount = daySessions.size - 1
@@ -168,8 +168,8 @@ class WidgetCourseSnapshotProvider(
 
     private fun semesterStatusLabel(progress: SemesterProgress): String? {
         return when (progress) {
-            SemesterProgress.BEFORE_START -> "Semester has not started yet"
-            SemesterProgress.AFTER_END -> "Semester has already ended"
+            SemesterProgress.BEFORE_START -> "学期尚未开始"
+            SemesterProgress.AFTER_END -> "学期已结束"
             SemesterProgress.IN_PROGRESS -> null
         }
     }
@@ -203,7 +203,13 @@ class WidgetCourseSnapshotProvider(
             }
         }
 
-        val accent = if (dynamicColorEnabled) 0xFF4A90D9.toInt() else 0xFF3F51B5.toInt()
+        // Follow the app fallback theme's blue primary (ui/theme/Color.kt) so widget accents
+        // match in-app colors when dynamic color is off; dark surfaces need the lighter tone.
+        val accent = when {
+            dynamicColorEnabled -> 0xFF4A90D9.toInt()
+            dark -> 0xFFA0CAFD.toInt()
+            else -> 0xFF36618E.toInt()
+        }
 
         return if (dark) {
             WidgetPalette(
