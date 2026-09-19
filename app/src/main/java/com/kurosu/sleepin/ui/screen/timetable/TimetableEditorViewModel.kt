@@ -3,6 +3,7 @@ package com.kurosu.sleepin.ui.screen.timetable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kurosu.sleepin.domain.usecase.csv.CsvImportReport
 import com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetScheduleDetailUseCase
@@ -45,6 +46,13 @@ data class TimetableEditorUiState(
     val selectedScheduleId: Long? = null,
     val message: String? = null,
     val csvImportErrorDetail: String? = null,
+    /**
+     * Explains a schedule mismatch after an otherwise successful CSV import.
+     *
+     * Kept separate from [message] because the editor screen closes as soon as the import succeeds,
+     * which would take a snackbar down before it could be read.
+     */
+    val csvScheduleMismatchNotice: String? = null,
     // When true the screen shows a confirmation dialog explaining that a successful
     // CSV import immediately creates and saves the timetable.
     val showCsvImportConfirm: Boolean = false,
@@ -98,6 +106,17 @@ class TimetableEditorViewModel(
 
     fun consumeCsvImportErrorDetail() {
         _uiState.update { it.copy(csvImportErrorDetail = null) }
+    }
+
+    /**
+     * Dismisses the schedule-mismatch notice and finally leaves the editor.
+     *
+     * Leaving is deferred to here instead of happening inside `createAndImportCsv` because the dialog
+     * is the only channel on this screen that survives the editor being popped.
+     */
+    fun consumeCsvScheduleMismatchNotice() {
+        _uiState.update { it.copy(csvScheduleMismatchNotice = null) }
+        viewModelScope.launch { _events.emit(TimetableEditorEvent.Saved) }
     }
 
     fun onNameChange(value: String) {
@@ -179,6 +198,15 @@ class TimetableEditorViewModel(
             val scheduleId = state.selectedScheduleId
                 ?: return@launch emitMessage("请选择作息表")
 
+            // Resolved before the timetable is created. This check used to run after creation and then
+            // simply return, which left an empty timetable behind on every attempt.
+            val schedule = getScheduleDetailUseCase(scheduleId)
+                ?: return@launch emitMessage("所选作息表不存在，请重新选择")
+            val schedulePeriods = schedule.periods.map { period -> period.periodNumber }.toSet()
+            if (schedulePeriods.isEmpty()) {
+                return@launch emitMessage("所选作息表没有课节，请先补全作息表再导入 CSV")
+            }
+
             _uiState.update { it.copy(isSaving = true, isCsvBusy = true) }
 
             when (
@@ -191,58 +219,46 @@ class TimetableEditorViewModel(
                 )
             ) {
                 is TimetableSaveResult.Success -> {
-                    val scheduleDetail = getScheduleDetailUseCase(scheduleId)
-                    val maxPeriod = scheduleDetail?.periods?.maxOfOrNull { it.periodNumber }
-                    if (maxPeriod == null || maxPeriod <= 0) {
-                        _uiState.update {
-                            it.copy(
-                                isSaving = false,
-                                isCsvBusy = false,
-                                message = "所选作息表没有可用课节，无法导入 CSV"
-                            )
-                        }
-                        return@launch
-                    }
-
                     val report = importCsvUseCase(
                         timetableId = createResult.timetableId,
                         totalWeeks = totalWeeks,
-                        maxPeriod = maxPeriod,
+                        schedulePeriods = schedulePeriods,
                         rawCsv = rawCsv
                     )
 
-                    // Import is all-or-nothing from the user's perspective: any parse error or
-                    // an empty result rolls back the just-created timetable so the user can fix
+                    // Import is all-or-nothing from the user's perspective: a structural parse error
+                    // or an empty result rolls back the just-created timetable so the user can fix
                     // the CSV and retry without leaving duplicates behind. Form input is kept in
-                    // UI state, so the create screen stays filled in.
+                    // UI state, so the create screen stays filled in. A period the schedule does not
+                    // define is *not* such an error and never triggers the rollback.
                     val isFullSuccess = report.importedSessionCount > 0 && report.errors.isEmpty()
                     if (!isFullSuccess) {
                         deleteTimetableUseCase(createResult.timetableId)
                     }
 
+                    val hasScheduleMismatch = report.periodsMissingFromSchedule.isNotEmpty()
                     _uiState.update {
                         it.copy(
                             isSaving = false,
                             isCsvBusy = false,
-                            message = if (isFullSuccess) {
-                                buildString {
-                                    append("导入完成：")
-                                    append(report.importedCourseCount)
-                                    append(" 门课程，")
-                                    append(report.importedSessionCount)
-                                    append(" 条课时")
-                                }
-                            } else if (report.importedSessionCount == 0) {
-                                "未导入任何课时，已取消创建课程表"
-                            } else {
-                                "CSV 存在 ${report.errors.size} 行错误，已取消创建课程表，请修正后重试"
+                            message = when {
+                                isFullSuccess ->
+                                    "导入完成：${report.importedCourseCount} 门课程，${report.importedSessionCount} 条课时"
+                                report.importedSessionCount == 0 -> "未导入任何课时，已取消创建课程表"
+                                else -> "CSV 存在 ${report.errors.size} 行错误，已取消创建课程表，请修正后重试"
                             },
-                            csvImportErrorDetail = buildCsvImportErrorDetail(report)
+                            csvImportErrorDetail = buildCsvImportErrorDetail(report),
+                            csvScheduleMismatchNotice = if (isFullSuccess && hasScheduleMismatch) {
+                                buildCsvScheduleMismatchNotice(report)
+                            } else {
+                                null
+                            }
                         )
                     }
-                    // Leave the editor only when everything imported cleanly; otherwise stay so
-                    // the error dialog can be read and the retained inputs reused for a retry.
-                    if (isFullSuccess) {
+                    // Leave the editor only when everything imported cleanly. A mismatch keeps the user
+                    // here until they acknowledge it, so the "extend your schedule" instruction is
+                    // actually read; `consumeCsvScheduleMismatchNotice` emits Saved afterwards.
+                    if (isFullSuccess && !hasScheduleMismatch) {
                         _events.emit(TimetableEditorEvent.Saved)
                     }
                 }
@@ -380,9 +396,47 @@ class TimetableEditorViewModel(
     }
 
     /**
+     * Builds the schedule-mismatch notice shown after an otherwise successful CSV import.
+     *
+     * The affected sessions are stored either way — dropping them would lose classes the file really
+     * contains — so this text is the only signal that they will not appear on the week grid until the
+     * schedule defines their periods.
+     */
+    private fun buildCsvScheduleMismatchNotice(report: CsvImportReport): String = buildString {
+        append("已导入 ")
+        append(report.importedCourseCount)
+        append(" 门课程、")
+        append(report.importedSessionCount)
+        append(" 条课时，但第 ")
+        append(formatPeriodNumbers(report.periodsMissingFromSchedule))
+        append(" 节未在所选作息表中定义。\n\n")
+        append("请到「作息表」补全这些节次的时间，否则这些课时不会显示在课表上。")
+    }
+
+    /**
+     * Renders period numbers compactly so a long list stays readable: `1,2,3,7` becomes `1-3、7`.
+     */
+    private fun formatPeriodNumbers(periods: List<Int>): String {
+        val sorted = periods.distinct().sorted()
+        val parts = mutableListOf<String>()
+        var index = 0
+        while (index < sorted.size) {
+            val rangeStart = sorted[index]
+            var rangeEnd = rangeStart
+            while (index + 1 < sorted.size && sorted[index + 1] == rangeEnd + 1) {
+                index += 1
+                rangeEnd = sorted[index]
+            }
+            parts += if (rangeStart == rangeEnd) "$rangeStart" else "$rangeStart-$rangeEnd"
+            index += 1
+        }
+        return parts.joinToString("、")
+    }
+
+    /**
      * Builds a multi-line error report so users can quickly locate malformed CSV rows.
      */
-    private fun buildCsvImportErrorDetail(report: com.kurosu.sleepin.domain.usecase.csv.CsvImportReport): String? {
+    private fun buildCsvImportErrorDetail(report: CsvImportReport): String? {
         if (report.errors.isEmpty()) return null
         return buildString {
             append("导入遇到错误，请检查以下行：\n\n")

@@ -126,6 +126,22 @@ fun TimetableEditorScreen(
         )
     }
 
+    // Schedule mismatch after a successful import: the sessions are already stored, but their periods
+    // have no class time yet. A dialog is used instead of a snackbar because the editor closes as soon
+    // as the import succeeds, so this instruction has to be acknowledged before leaving.
+    uiState.csvScheduleMismatchNotice?.let { notice ->
+        AlertDialog(
+            onDismissRequest = viewModel::consumeCsvScheduleMismatchNotice,
+            title = { Text("作息表需要补全") },
+            text = { Text(notice) },
+            confirmButton = {
+                TextButton(onClick = viewModel::consumeCsvScheduleMismatchNotice) {
+                    Text("我知道了")
+                }
+            }
+        )
+    }
+
     // Confirm before opening the file picker: a successful import saves the timetable
     // immediately, so the user must acknowledge that up front.
     if (uiState.showCsvImportConfirm) {

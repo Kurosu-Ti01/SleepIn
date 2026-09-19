@@ -34,16 +34,74 @@ class ImportCsvUseCaseTest {
         val report = useCase(
             timetableId = 1L,
             totalWeeks = 18,
-            maxPeriod = 12,
+            schedulePeriods = (1..12).toSet(),
             rawCsv = csv
         )
 
         assertEquals(2, report.importedCourseCount)
         assertEquals(3, report.importedSessionCount)
         assertEquals(0, report.errors.size)
+        assertEquals(emptyList<Int>(), report.periodsMissingFromSchedule)
         assertEquals(2, repository.savedCourses.size)
         assertEquals(2, repository.savedCourses[0].second.size)
         assertEquals(1, repository.savedCourses[1].second.size)
+    }
+
+    @Test
+    fun importCsv_keepsSessionsOutsideTheSchedule_andReportsTheMissingPeriods() = runBlocking {
+        val repository = RecordingCourseRepository()
+        val useCase = ImportCsvUseCase(
+            importer = CsvImporter(),
+            courseRepository = repository
+        )
+
+        val csv = """
+            课程名称,教师,地点,星期,开始节次,结束节次,周次
+            高等数学,张三,A101,1,11,13,1-16
+        """.trimIndent()
+
+        val report = useCase(
+            timetableId = 1L,
+            totalWeeks = 18,
+            // The schedule stops at period 12, so period 13 has no class time configured yet.
+            schedulePeriods = (1..12).toSet(),
+            rawCsv = csv
+        )
+
+        assertEquals(1, report.importedCourseCount)
+        assertEquals(1, report.importedSessionCount)
+        assertEquals(0, report.errors.size)
+        assertEquals(listOf(13), report.periodsMissingFromSchedule)
+
+        val savedSession = repository.savedCourses.single().second.single()
+        assertEquals(11, savedSession.startPeriod)
+        assertEquals(13, savedSession.endPeriod)
+    }
+
+    @Test
+    fun importCsv_reportsGapPeriods_whenScheduleSkipsANumberInsideTheRange() = runBlocking {
+        val repository = RecordingCourseRepository()
+        val useCase = ImportCsvUseCase(
+            importer = CsvImporter(),
+            courseRepository = repository
+        )
+
+        val csv = """
+            课程名称,教师,地点,星期,开始节次,结束节次,周次
+            高等数学,张三,A101,1,2,4,1-16
+        """.trimIndent()
+
+        val report = useCase(
+            timetableId = 1L,
+            totalWeeks = 18,
+            // Periods 1 and 2 and 4 exist, but 3 is missing: both endpoints are defined, so only
+            // expanding the range can find the gap.
+            schedulePeriods = setOf(1, 2, 4),
+            rawCsv = csv
+        )
+
+        assertEquals(listOf(3), report.periodsMissingFromSchedule)
+        assertEquals(1, report.importedSessionCount)
     }
 
     private class RecordingCourseRepository : CourseRepository {
