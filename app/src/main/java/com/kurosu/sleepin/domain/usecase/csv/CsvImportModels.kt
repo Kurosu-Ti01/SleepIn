@@ -58,10 +58,15 @@ data class CsvRowError(
  * @property importedCourseCount The number of distinct `Course` domain models saved.
  * @property importedSessionCount The number of `CourseSession` domain models saved.
  * @property errors A list of errors tied to specific CSV rows that were skipped.
+ * @property periodsMissingFromSchedule Sorted, distinct period numbers that the imported sessions
+ *   reference but the target schedule does not define. This is not an error: a portal or an export
+ *   may legitimately use more periods than the user has configured so far. It is reported so the UI
+ *   can tell the user to extend the schedule instead of silently dropping the affected sessions.
  */
 data class CsvImportReport(
     val importedCourseCount: Int,
     val importedSessionCount: Int,
-    val errors: List<CsvRowError>
+    val errors: List<CsvRowError>,
+    val periodsMissingFromSchedule: List<Int> = emptyList()
 )
 

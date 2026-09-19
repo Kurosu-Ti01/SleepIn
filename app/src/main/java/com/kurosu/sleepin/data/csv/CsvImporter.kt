@@ -1,5 +1,6 @@
 package com.kurosu.sleepin.data.csv
 
+import com.kurosu.sleepin.domain.model.MAX_SUPPORTED_PERIOD_NUMBER
 import com.kurosu.sleepin.domain.model.WeekType
 import com.kurosu.sleepin.domain.usecase.csv.CsvCourseRow
 import com.kurosu.sleepin.domain.usecase.csv.CsvRowError
@@ -9,6 +10,13 @@ import com.kurosu.sleepin.domain.usecase.csv.CsvRowError
  *
  * The parser accepts both Chinese and English header variants so localized files can be imported
  * without extra user conversion steps.
+ *
+ * Validation here is deliberately restricted to what a CSV row can be judged on *by itself*: header
+ * presence, value types, and structurally legal ranges. Whether a referenced period exists in the
+ * chosen schedule, or whether a week fits the semester length, depends on the import target, so the
+ * parser must not discard a row over it. A course may legitimately meet in period 13 while the
+ * current schedule only defines twelve — the user is expected to extend the schedule afterwards, and
+ * `ImportCsvUseCase` reports that mismatch instead of hiding it.
  */
 class CsvImporter {
 
@@ -24,7 +32,7 @@ class CsvImporter {
         val errors: List<CsvRowError>
     )
 
-    fun parse(rawCsv: String, totalWeeks: Int, maxPeriod: Int): ParseResult {
+    fun parse(rawCsv: String, totalWeeks: Int): ParseResult {
         val normalized = rawCsv.replace("\uFEFF", "")
         val lines = normalized
             .lineSequence()
@@ -53,8 +61,7 @@ class CsvImporter {
                     rowNumber = rowNumber,
                     fields = fields,
                     headerMap = headerMap,
-                    totalWeeks = totalWeeks,
-                    maxPeriod = maxPeriod
+                    totalWeeks = totalWeeks
                 )
                 rows.add(row)
             } catch (error: IllegalArgumentException) {
@@ -69,8 +76,7 @@ class CsvImporter {
         rowNumber: Int,
         fields: List<String>,
         headerMap: Map<String, Int>,
-        totalWeeks: Int,
-        maxPeriod: Int
+        totalWeeks: Int
     ): CsvCourseRow {
         fun value(vararg candidateHeaders: String): String {
             val index = candidateHeaders
@@ -95,8 +101,19 @@ class CsvImporter {
             ?: throw IllegalArgumentException("Start period must be an integer")
         val endPeriod = value("结束节次", "EndPeriod").toIntOrNull()
             ?: throw IllegalArgumentException("End period must be an integer")
-        if (startPeriod !in 1..maxPeriod || endPeriod !in 1..maxPeriod || startPeriod > endPeriod) {
-            throw IllegalArgumentException("Period range must be within 1-$maxPeriod and start <= end")
+        if (startPeriod < 1 || endPeriod < 1) {
+            throw IllegalArgumentException("Period numbers must be greater than 0")
+        }
+        if (startPeriod > endPeriod) {
+            throw IllegalArgumentException("Start period must not be greater than end period")
+        }
+        // Structural upper bound only: the week grid renders one row per period number, so a typo or
+        // a bad export must not be able to ask the app for an enormous grid. Exceeding the current
+        // schedule's period list is not an error and is reported as a mismatch instead.
+        if (endPeriod > MAX_SUPPORTED_PERIOD_NUMBER) {
+            throw IllegalArgumentException(
+                "Period number must not exceed $MAX_SUPPORTED_PERIOD_NUMBER"
+            )
         }
 
         val hasWeeksColumn = headerMap.containsKey("周次") || headerMap.containsKey("Weeks")

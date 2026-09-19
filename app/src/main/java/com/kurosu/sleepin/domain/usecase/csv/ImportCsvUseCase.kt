@@ -17,10 +17,16 @@ import kotlinx.coroutines.withContext
  *   the same course name "Math", it maps to exactly ONE `Course` domain entity and THREE `CourseSession` models.
  *
  * Import Strategy:
- * - Invalid rows are skipped completely but kept track of, resulting in row-level errors (`CsvRowError`).
+ * - Rows that cannot be parsed are skipped and recorded as `CsvRowError`.
  * - For successfully grouped rows, a new parent `Course` entity is created, assigning it a default UI color.
  * - The session details are linked via a `saveCourseWithSessions` repository call which uses Room's 
  *   @Transaction to commit the parent-child entities atomically to the SQLite database.
+ *
+ * Schedule mismatch:
+ * - Period numbers are never clipped or rejected against the target schedule. Sessions that reference
+ *   a period the schedule does not define are still stored, and their period numbers are reported in
+ *   `CsvImportReport.periodsMissingFromSchedule` so the UI can ask the user to extend the schedule.
+ *   Discarding such rows would silently lose classes that the source data really does contain.
  * 
  * IO Flow and Coroutine Dispatching:
  * - Both the parsing of the string and the database writes (via CourseRepository) are I/O bound 
@@ -39,19 +45,20 @@ class ImportCsvUseCase(
      *
      * @param timetableId the target timetable to receive these models.
      * @param totalWeeks limit bounds for parsing weeks data constraint.
-     * @param maxPeriod limit bounds for parsing daily periods.
+     * @param schedulePeriods period numbers defined by the target schedule. Used only to diagnose a
+     *   mismatch — sessions outside this set are imported as-is.
      * @param rawCsv the unparsed raw string content read from the file stream.
-     * @return A report combining imported counts and validation errors.
+     * @return A report combining imported counts, validation errors and the schedule mismatch.
      */
     suspend operator fun invoke(
         timetableId: Long,
         totalWeeks: Int,
-        maxPeriod: Int,
+        schedulePeriods: Set<Int>,
         rawCsv: String
     ): CsvImportReport = withContext(Dispatchers.IO) {
         // Step 1: Parse the plain text CSV into structured flat intermediate representations.
-        val parsed = importer.parse(rawCsv = rawCsv, totalWeeks = totalWeeks, maxPeriod = maxPeriod)
-        
+        val parsed = importer.parse(rawCsv = rawCsv, totalWeeks = totalWeeks)
+
         // If there are no valid rows, return structural errors early
         if (parsed.rows.isEmpty()) {
             return@withContext CsvImportReport(
@@ -60,6 +67,11 @@ class ImportCsvUseCase(
                 errors = parsed.errors
             )
         }
+
+        val periodsMissingFromSchedule = findPeriodsMissingFromSchedule(
+            rows = parsed.rows,
+            schedulePeriods = schedulePeriods
+        )
 
         val now = System.currentTimeMillis()
         var importedCourseCount = 0
@@ -115,8 +127,25 @@ class ImportCsvUseCase(
         return@withContext CsvImportReport(
             importedCourseCount = importedCourseCount,
             importedSessionCount = importedSessionCount,
-            errors = parsed.errors
+            errors = parsed.errors,
+            periodsMissingFromSchedule = periodsMissingFromSchedule
         )
     }
+
+    /**
+     * Lists the period numbers referenced by [rows] that [schedulePeriods] does not define.
+     *
+     * A session occupying periods 5 to 7 references all three, so the range is expanded rather than
+     * only comparing its endpoints: a schedule that defines 5 and 7 but not 6 would still leave the
+     * middle of the block without a class time.
+     */
+    private fun findPeriodsMissingFromSchedule(
+        rows: List<CsvCourseRow>,
+        schedulePeriods: Set<Int>
+    ): List<Int> = rows
+        .flatMap { row -> (row.startPeriod..row.endPeriod).toList() }
+        .distinct()
+        .filterNot { period -> period in schedulePeriods }
+        .sorted()
 }
 
