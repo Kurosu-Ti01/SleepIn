@@ -16,16 +16,21 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.LocalTime
 
 /**
  * UI-editable representation of one period row.
  *
  * Strings are used for inputs so text fields can preserve partial/incomplete user input
  * until validation runs in the save action.
+ *
+ * [periodNumber] is editable rather than derived from the row position. A schedule may keep the
+ * period numbers its source reported, including gaps, and deriving the number from the row index
+ * would silently renumber the schedule and push courses out of its range. It is a string for the same
+ * reason as the times: a half-typed number must not be coerced while the user is editing.
  */
 data class EditableSchedulePeriod(
     val id: Long,
+    val periodNumber: String,
     val startTime: String,
     val endTime: String
 )
@@ -39,7 +44,7 @@ data class ScheduleEditorUiState(
     val isCsvBusy: Boolean = false,
     val name: String = "",
     val periods: List<EditableSchedulePeriod> = listOf(
-        EditableSchedulePeriod(id = 0, startTime = "08:00", endTime = "08:45")
+        EditableSchedulePeriod(id = 0, periodNumber = "1", startTime = "08:00", endTime = "08:45")
     ),
     // Fields used by the quick generation tool.
     val quickStartTime: String = "08:00",
@@ -122,6 +127,10 @@ class ScheduleEditorViewModel(
         _uiState.update { it.copy(quickPeriodCount = value) }
     }
 
+    fun onPeriodNumberChange(index: Int, value: String) {
+        updatePeriod(index) { it.copy(periodNumber = value) }
+    }
+
     fun onPeriodStartTimeChange(index: Int, value: String) {
         updatePeriod(index) { it.copy(startTime = value) }
     }
@@ -130,12 +139,28 @@ class ScheduleEditorViewModel(
         updatePeriod(index) { it.copy(endTime = value) }
     }
 
-    /** Appends a new row. Period numbering is derived from row order at save time. */
+    /**
+     * Appends a new row numbered after the highest existing one.
+     *
+     * Numbering from the maximum rather than from the row count is what makes “extend the schedule”
+     * work when numbers already skip: appending to a 1..12 schedule yields 13, not a duplicate of an
+     * existing number. Filling a gap in the middle is done by editing the row's number directly.
+     *
+     * When no row carries a parsable number yet, the first slot is used so the row is still usable.
+     */
     fun addPeriod() {
-        _uiState.update {
-            it.copy(
-                periods = it.periods + EditableSchedulePeriod(
+        _uiState.update { state ->
+            val nextNumber = state.periods
+                .mapNotNull { period -> period.periodNumber.trim().toIntOrNull() }
+                // Negative numbers are unusable, so they must not raise the starting point above 1.
+                .filter { number -> number > 0 }
+                .maxOrNull()
+                ?.plus(1)
+                ?: 1
+            state.copy(
+                periods = state.periods + EditableSchedulePeriod(
                     id = 0,
+                    periodNumber = nextNumber.toString(),
                     startTime = "08:00",
                     endTime = "08:45"
                 )
@@ -160,7 +185,7 @@ class ScheduleEditorViewModel(
      */
     fun generatePeriods() {
         val state = _uiState.value
-        val start = parseTime(state.quickStartTime)
+        val start = parseScheduleTime(state.quickStartTime)
             ?: return emitMessage("自动生成失败：开始时间格式应为 HH:mm")
         val classDuration = state.quickClassDurationMinutes.toIntOrNull()
             ?: return emitMessage("自动生成失败：课时长度应为整数")
@@ -175,10 +200,12 @@ class ScheduleEditorViewModel(
 
         val generated = mutableListOf<EditableSchedulePeriod>()
         var cursor = start
-        repeat(periodCount) {
+        // Quick generation always produces a dense 1..N list; that is the point of the tool.
+        repeat(periodCount) { index ->
             val end = cursor.plusMinutes(classDuration.toLong())
             generated += EditableSchedulePeriod(
                 id = 0,
+                periodNumber = (index + 1).toString(),
                 startTime = cursor.toString(),
                 endTime = end.toString()
             )
@@ -194,15 +221,9 @@ class ScheduleEditorViewModel(
     fun save() {
         viewModelScope.launch {
             val state = _uiState.value
-            val drafts = state.periods.mapIndexed { index, period ->
-                val start = parseTime(period.startTime) ?: return@launch emitMessage("开始时间格式应为 HH:mm")
-                val end = parseTime(period.endTime) ?: return@launch emitMessage("结束时间格式应为 HH:mm")
-                SaveScheduleUseCase.PeriodDraft(
-                    id = period.id,
-                    periodNumber = index + 1,
-                    startTime = start,
-                    endTime = end
-                )
+            val drafts = when (val draftResult = buildSchedulePeriodDrafts(state.periods)) {
+                is SchedulePeriodDraftResult.Invalid -> return@launch emitMessage(draftResult.message)
+                is SchedulePeriodDraftResult.Ready -> draftResult.drafts
             }
 
             _uiState.update { it.copy(isSaving = true) }
@@ -336,15 +357,7 @@ class ScheduleEditorViewModel(
                 it.copy(
                     isLoading = false,
                     name = detail.schedule.name,
-                    periods = detail.periods
-                        .sortedBy { it.periodNumber }
-                        .map { period ->
-                        EditableSchedulePeriod(
-                            id = period.id,
-                            startTime = period.startTime.toString(),
-                            endTime = period.endTime.toString()
-                        )
-                    }
+                    periods = toEditableSchedulePeriods(detail.periods)
                 )
             }
         }
@@ -358,10 +371,6 @@ class ScheduleEditorViewModel(
             state.copy(periods = updated)
         }
     }
-
-    /** Parses HH:mm-like text into [LocalTime]. */
-    private fun parseTime(value: String): LocalTime? =
-        runCatching { LocalTime.parse(value.trim()) }.getOrNull()
 
     private fun emitMessage(message: String) {
         _uiState.update { it.copy(message = message) }

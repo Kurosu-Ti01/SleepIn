@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -282,9 +283,23 @@ fun ScheduleEditorScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("第 ${index + 1} 节")
+                        // Editable so a gap in the numbering can be filled: the app only asks the user
+                        // to complete a schedule, it must not force them to delete and re-add rows to
+                        // reach a number in the middle.
+                        OutlinedTextField(
+                            modifier = Modifier.weight(1f),
+                            value = period.periodNumber,
+                            onValueChange = { viewModel.onPeriodNumberChange(index, it) },
+                            label = { Text("节次") },
+                            // No placeholder: the row number would be wrong for any schedule that skips a
+                            // number, and a grey value that the field does not actually contain is easy to
+                            // mistake for the real one.
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true
+                        )
                         IconButton(onClick = { viewModel.removePeriod(index) }) {
                             Icon(Icons.Default.Delete, contentDescription = "删除课节")
                         }
