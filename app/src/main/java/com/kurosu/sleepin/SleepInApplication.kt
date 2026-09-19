@@ -30,6 +30,8 @@ import com.kurosu.sleepin.domain.usecase.timetable.SetActiveTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
+import com.kurosu.sleepin.domain.usecase.importer.CommitImportUseCase
+import com.kurosu.sleepin.domain.usecase.importer.ParseImportSubmissionUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
@@ -116,6 +118,11 @@ class SleepInApplication : Application() {
     lateinit var exportCsvUseCase: ExportCsvUseCase
         private set
 
+    lateinit var parseImportSubmissionUseCase: ParseImportSubmissionUseCase
+        private set
+    lateinit var commitImportUseCase: CommitImportUseCase
+        private set
+
     private lateinit var seedDefaultScheduleUseCase: SeedDefaultScheduleUseCase
 
     // Dedicated app scope for lightweight startup tasks.
@@ -144,6 +151,8 @@ class SleepInApplication : Application() {
         val csvExporter = RepositoryModule.provideCsvExporter()
         val scheduleCsvImporter = RepositoryModule.provideScheduleCsvImporter()
         val scheduleCsvExporter = RepositoryModule.provideScheduleCsvExporter()
+        val importPayloadParser = RepositoryModule.provideImportPayloadParser()
+        val timetableImportRepository = RepositoryModule.provideTimetableImportRepository(database)
 
         getSchedulesUseCase = GetSchedulesUseCase(scheduleRepository)
         getScheduleDetailUseCase = GetScheduleDetailUseCase(scheduleRepository)
@@ -185,6 +194,13 @@ class SleepInApplication : Application() {
 
         importCsvUseCase = ImportCsvUseCase(csvImporter, courseRepository)
         exportCsvUseCase = ExportCsvUseCase(courseRepository, timetableRepository, csvExporter)
+
+        // Academic-portal import: parse a script payload, then persist it in one transaction.
+        parseImportSubmissionUseCase = ParseImportSubmissionUseCase(importPayloadParser)
+        commitImportUseCase = CommitImportUseCase(
+            timetableImportRepository = timetableImportRepository,
+            getTimetableDetailUseCase = getTimetableDetailUseCase
+        )
     }
 
     /**

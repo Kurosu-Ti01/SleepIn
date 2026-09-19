@@ -5,15 +5,18 @@ import com.kurosu.sleepin.data.csv.CsvExporter
 import com.kurosu.sleepin.data.csv.CsvImporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvExporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvImporter
+import com.kurosu.sleepin.data.importer.ImportPayloadParser
 import com.kurosu.sleepin.data.preferences.SettingsPreferenceStore
 import com.kurosu.sleepin.data.repository.CourseRepositoryImpl
 import com.kurosu.sleepin.data.repository.ScheduleRepositoryImpl
 import com.kurosu.sleepin.data.repository.SettingsRepositoryImpl
+import com.kurosu.sleepin.data.repository.TimetableImportRepositoryImpl
 import com.kurosu.sleepin.data.repository.TimetableRepositoryImpl
 import com.kurosu.sleepin.data.update.GitHubUpdateRepositoryImpl
 import com.kurosu.sleepin.domain.repository.CourseRepository
 import com.kurosu.sleepin.domain.repository.ScheduleRepository
 import com.kurosu.sleepin.domain.repository.SettingsRepository
+import com.kurosu.sleepin.domain.repository.TimetableImportRepository
 import com.kurosu.sleepin.domain.repository.TimetableRepository
 import com.kurosu.sleepin.domain.repository.UpdateRepository
 
@@ -30,6 +33,23 @@ object RepositoryModule {
     fun provideScheduleCsvImporter(): ScheduleCsvImporter = ScheduleCsvImporter()
 
     fun provideScheduleCsvExporter(): ScheduleCsvExporter = ScheduleCsvExporter()
+
+    fun provideImportPayloadParser(): ImportPayloadParser = ImportPayloadParser()
+
+    /**
+     * Provides the transactional writer used by the academic-portal import flow.
+     *
+     * It is wired directly against DAOs rather than [CourseRepository] because a bulk import must
+     * create or retarget a timetable and replace all of its courses within a single transaction.
+     */
+    fun provideTimetableImportRepository(database: SleepInDatabase): TimetableImportRepository =
+        TimetableImportRepositoryImpl(
+            database = database,
+            timetableDao = DatabaseModule.provideTimetableDao(database),
+            scheduleDao = DatabaseModule.provideScheduleDao(database),
+            courseDao = DatabaseModule.provideCourseDao(database),
+            courseSessionDao = DatabaseModule.provideCourseSessionDao(database)
+        )
 
     fun provideTimetableRepository(database: SleepInDatabase): TimetableRepository =
         TimetableRepositoryImpl(DatabaseModule.provideTimetableDao(database))
