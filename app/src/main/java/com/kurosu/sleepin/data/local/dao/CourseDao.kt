@@ -64,6 +64,24 @@ interface CourseDao {
     suspend fun update(course: CourseEntity)
 
     /**
+     * Deletes every course of one timetable.
+     *
+     * Child session rows are removed by the `ON DELETE CASCADE` foreign key on `course_sessions`,
+     * so callers do not need to delete them separately.
+     */
+    @Query("DELETE FROM courses WHERE timetableId = :timetableId")
+    suspend fun deleteByTimetableId(timetableId: Long)
+
+    /**
+     * Inserts several courses and returns their generated ids in the same order as [courses].
+     *
+     * Bulk import relies on that ordering guarantee to attach each session to the course it was
+     * imported with; inserting one row at a time would open a separate statement per course.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(courses: List<CourseEntity>): List<Long>
+
+    /**
      * Deletes a specific course. Cascading handles session deletion if configured on FK.
      */
     @Query("DELETE FROM courses WHERE id = :courseId")

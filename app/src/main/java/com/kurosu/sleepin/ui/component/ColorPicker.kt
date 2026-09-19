@@ -15,29 +15,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-
-/**
- * Default course color palette used by the editor.
- *
- * The integer values are ARGB colors to keep parity with the persisted course color field.
- */
-val DefaultCourseColors: List<Int> = listOf(
-    0xFF4A90D9.toInt(),
-    0xFF67C23A.toInt(),
-    0xFFE6A23C.toInt(),
-    0xFFF56C6C.toInt(),
-    0xFF909399.toInt(),
-    0xFF9B59B6.toInt(),
-    0xFF1ABC9C.toInt(),
-    0xFFE91E63.toInt(),
-    0xFF3F51B5.toInt(),
-    0xFF00BCD4.toInt(),
-    0xFF8BC34A.toInt(),
-    0xFFFF9800.toInt()
-)
+import com.kurosu.sleepin.domain.model.CourseColorPalette
 
 /**
  * Wrapping color picker for selecting a course display color.
+ *
+ * The palette is owned by the domain layer ([CourseColorPalette]) because the chosen value is
+ * persisted as-is; the picker only renders it.
  *
  * We intentionally use [WrapFlowLayout] instead of a single-line row so the palette can reflow to
  * multiple lines on narrow screens and under larger font/display scaling without clipping.
@@ -47,7 +31,7 @@ fun ColorPicker(
     selectedColor: Int,
     onColorSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    colors: List<Int> = DefaultCourseColors
+    colors: List<Int> = CourseColorPalette
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         WrapFlowLayout(

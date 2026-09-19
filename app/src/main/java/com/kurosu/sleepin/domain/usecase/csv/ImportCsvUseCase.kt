@@ -4,7 +4,7 @@ import com.kurosu.sleepin.data.csv.CsvImporter
 import com.kurosu.sleepin.domain.model.Course
 import com.kurosu.sleepin.domain.model.CourseSession
 import com.kurosu.sleepin.domain.repository.CourseRepository
-import com.kurosu.sleepin.ui.component.DefaultCourseColors
+import com.kurosu.sleepin.domain.model.CourseColorPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -78,7 +78,7 @@ class ImportCsvUseCase(
                     timetableId = timetableId,
                     name = first.name.trim(),
                     teacher = first.teacher?.trim().takeUnless { it.isNullOrEmpty() },
-                    color = DefaultCourseColors[index % DefaultCourseColors.size], // Assign sequential color
+                    color = CourseColorPalette[index % CourseColorPalette.size], // Assign sequential color
                     note = null,
                     createdAt = now
                 )
