@@ -41,16 +41,34 @@ fun TimelineSidebar(
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center
                 )
-                Text(
-                    text = period.startTime.format(sidebarTimeFormatter),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f),
-                    textAlign = TextAlign.Center
+
+                val timeTextStyle = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f
                 )
-                Text(
-                    text = period.endTime.format(sidebarTimeFormatter),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f),
-                    textAlign = TextAlign.Center
-                )
+                val startTime = period.startTime
+                val endTime = period.endTime
+                if (startTime == null || endTime == null) {
+                    // The schedule does not define this period, so the row has no class time to show.
+                    // Saying so is better than leaving the two time lines blank, which would read as a
+                    // rendering problem rather than as missing configuration.
+                    Text(
+                        text = "未配置",
+                        style = timeTextStyle,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = startTime.format(sidebarTimeFormatter),
+                        style = timeTextStyle,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = endTime.format(sidebarTimeFormatter),
+                        style = timeTextStyle,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }

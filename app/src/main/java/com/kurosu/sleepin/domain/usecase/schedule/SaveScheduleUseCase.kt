@@ -1,5 +1,6 @@
 package com.kurosu.sleepin.domain.usecase.schedule
 
+import com.kurosu.sleepin.domain.model.MAX_SUPPORTED_PERIOD_NUMBER
 import com.kurosu.sleepin.domain.model.Schedule
 import com.kurosu.sleepin.domain.model.SchedulePeriod
 import com.kurosu.sleepin.domain.repository.ScheduleRepository
@@ -20,7 +21,8 @@ class SaveScheduleUseCase(
      * Raw period payload coming from the editor layer.
      *
      * - [id] is optional and mainly meaningful when editing an existing schedule.
-     * - [periodNumber] is business-visible numbering (1, 2, 3...).
+     * - [periodNumber] is business-visible numbering (1, 2, 3...), bounded by
+     *   [MAX_SUPPORTED_PERIOD_NUMBER] because the week grid renders one row per period number.
      * - [startTime]/[endTime] are normalized `LocalTime` values already parsed by the ViewModel.
      */
     data class PeriodDraft(
@@ -66,6 +68,12 @@ class SaveScheduleUseCase(
         // Duplicate numbers would make downstream mapping ambiguous.
         if (periods.map { it.periodNumber }.distinct().size != periods.size) {
             return SaveScheduleResult.ValidationError("课节编号不能重复")
+        }
+        // Upper bound: the week grid renders one row per period number, so an unbounded value would ask
+        // the home screen to allocate an enormous grid. Enforced here because this is the single gate
+        // every writer passes through — the editor and the schedule CSV import both end up here.
+        if (periods.any { it.periodNumber > MAX_SUPPORTED_PERIOD_NUMBER }) {
+            return SaveScheduleResult.ValidationError("课节编号不能超过 $MAX_SUPPORTED_PERIOD_NUMBER")
         }
         // Each row must represent a valid forward time interval.
         if (periods.any { !it.endTime.isAfter(it.startTime) }) {

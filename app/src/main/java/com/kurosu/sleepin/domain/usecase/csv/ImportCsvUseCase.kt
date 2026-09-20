@@ -3,6 +3,7 @@ package com.kurosu.sleepin.domain.usecase.csv
 import com.kurosu.sleepin.data.csv.CsvImporter
 import com.kurosu.sleepin.domain.model.Course
 import com.kurosu.sleepin.domain.model.CourseSession
+import com.kurosu.sleepin.domain.model.findUndefinedPeriods
 import com.kurosu.sleepin.domain.repository.CourseRepository
 import com.kurosu.sleepin.domain.model.CourseColorPalette
 import kotlinx.coroutines.Dispatchers
@@ -68,9 +69,9 @@ class ImportCsvUseCase(
             )
         }
 
-        val periodsMissingFromSchedule = findPeriodsMissingFromSchedule(
-            rows = parsed.rows,
-            schedulePeriods = schedulePeriods
+        val periodsMissingFromSchedule = findUndefinedPeriods(
+            usedPeriodRanges = parsed.rows.map { row -> row.startPeriod..row.endPeriod },
+            definedPeriods = schedulePeriods
         )
 
         val now = System.currentTimeMillis()
@@ -131,21 +132,5 @@ class ImportCsvUseCase(
             periodsMissingFromSchedule = periodsMissingFromSchedule
         )
     }
-
-    /**
-     * Lists the period numbers referenced by [rows] that [schedulePeriods] does not define.
-     *
-     * A session occupying periods 5 to 7 references all three, so the range is expanded rather than
-     * only comparing its endpoints: a schedule that defines 5 and 7 but not 6 would still leave the
-     * middle of the block without a class time.
-     */
-    private fun findPeriodsMissingFromSchedule(
-        rows: List<CsvCourseRow>,
-        schedulePeriods: Set<Int>
-    ): List<Int> = rows
-        .flatMap { row -> (row.startPeriod..row.endPeriod).toList() }
-        .distinct()
-        .filterNot { period -> period in schedulePeriods }
-        .sorted()
 }
 
