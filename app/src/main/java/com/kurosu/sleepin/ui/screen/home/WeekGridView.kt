@@ -118,6 +118,9 @@ private fun WeekGridContent(
     val gridLineColor = MaterialTheme.colorScheme.outlineVariant
     val todayColumnColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
     val timeIndicatorColor = Color(0xFFE53935)
+    // Rows whose period the schedule has not configured yet. An imported class can sit on one, so the
+    // row has to look different from a normal one; otherwise the block reads as a class with a time.
+    val unconfiguredRowColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
 
     BoxWithConstraints(
         modifier = Modifier
@@ -139,6 +142,17 @@ private fun WeekGridContent(
                     color = todayColumnColor,
                     topLeft = Offset(x = todayIndex * dayWidthPx, y = 0f),
                     size = androidx.compose.ui.geometry.Size(width = dayWidthPx, height = size.height)
+                )
+            }
+
+            // Tint the rows the schedule does not configure yet, so a class block sitting on one reads as
+            // "this period has no class time" instead of as a normal row.
+            periods.forEachIndexed { rowIndex, period ->
+                if (period.startTime != null) return@forEachIndexed
+                drawRect(
+                    color = unconfiguredRowColor,
+                    topLeft = Offset(x = 0f, y = rowIndex * rowHeightPx),
+                    size = androidx.compose.ui.geometry.Size(width = size.width, height = rowHeightPx)
                 )
             }
 

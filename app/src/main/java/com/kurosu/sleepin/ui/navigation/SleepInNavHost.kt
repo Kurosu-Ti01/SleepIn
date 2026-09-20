@@ -62,6 +62,9 @@ fun SleepInNavHost(
                 onTimetableListClick = { navController.navigate(Screen.TimetableList.route) },
                 onScheduleListClick = { navController.navigate(Screen.ScheduleList.route) },
                 onSettingsClick = { navController.navigate(Screen.Settings.route) },
+                onEditScheduleClick = { scheduleId ->
+                    navController.navigate(Screen.ScheduleEditor.createRoute(scheduleId))
+                },
                 courseRowHeightDp = appSettings.courseCellHeightDp,
                 viewModel = vm
             )

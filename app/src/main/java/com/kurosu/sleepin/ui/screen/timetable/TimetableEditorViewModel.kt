@@ -3,6 +3,7 @@ package com.kurosu.sleepin.ui.screen.timetable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kurosu.sleepin.domain.model.formatPeriodNumbers
 import com.kurosu.sleepin.domain.usecase.csv.CsvImportReport
 import com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
@@ -410,27 +411,7 @@ class TimetableEditorViewModel(
         append(" 条课时，但第 ")
         append(formatPeriodNumbers(report.periodsMissingFromSchedule))
         append(" 节未在所选作息表中定义。\n\n")
-        append("请到「作息表」补全这些节次的时间，否则这些课时不会显示在课表上。")
-    }
-
-    /**
-     * Renders period numbers compactly so a long list stays readable: `1,2,3,7` becomes `1-3、7`.
-     */
-    private fun formatPeriodNumbers(periods: List<Int>): String {
-        val sorted = periods.distinct().sorted()
-        val parts = mutableListOf<String>()
-        var index = 0
-        while (index < sorted.size) {
-            val rangeStart = sorted[index]
-            var rangeEnd = rangeStart
-            while (index + 1 < sorted.size && sorted[index + 1] == rangeEnd + 1) {
-                index += 1
-                rangeEnd = sorted[index]
-            }
-            parts += if (rangeStart == rangeEnd) "$rangeStart" else "$rangeStart-$rangeEnd"
-            index += 1
-        }
-        return parts.joinToString("、")
+        append("请到「作息表」补全这些节次的时间，否则这些课时没有上课时间、也不会触发上课提醒。")
     }
 
     /**

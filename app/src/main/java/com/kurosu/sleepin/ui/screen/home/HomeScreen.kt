@@ -16,6 +16,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kurosu.sleepin.domain.model.formatPeriodNumbers
 import com.kurosu.sleepin.ui.menu.HomeMenuSheet
 
 /**
@@ -44,6 +46,7 @@ fun HomeScreen(
     onTimetableListClick: () -> Unit,
     onScheduleListClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onEditScheduleClick: (Long) -> Unit,
     courseRowHeightDp: Int,
     viewModel: HomeViewModel
 ) {
@@ -129,6 +132,31 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
+                        }
+
+                        // Imported classes may reference periods the schedule does not define yet. They are
+                        // stored and drawn, but without a class time — so name the missing periods and let
+                        // the user jump straight to the schedule editor that can fix it.
+                        val activeScheduleId = uiState.activeScheduleId
+                        if (uiState.unconfiguredPeriods.isNotEmpty() && activeScheduleId != null) {
+                            // onClick rather than a clickable modifier so the banner gets Material's minimum
+                            // touch target and button semantics.
+                            Surface(
+                                onClick = { onEditScheduleClick(activeScheduleId) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                shape = MaterialTheme.shapes.medium
+                            ) {
+                                Text(
+                                    text = "第 ${formatPeriodNumbers(uiState.unconfiguredPeriods)} 节未在作息表中定义，” +
+                                        "相关课时没有上课时间、也不会触发上课提醒。点此补全作息表，补全后自动消失",
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
                         }
 
                         if (uiState.periods.isEmpty()) {
