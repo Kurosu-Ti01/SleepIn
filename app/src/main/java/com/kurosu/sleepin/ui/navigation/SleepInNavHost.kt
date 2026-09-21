@@ -13,6 +13,8 @@ import com.kurosu.sleepin.SleepInApplication
 import com.kurosu.sleepin.domain.model.AppSettings
 import com.kurosu.sleepin.ui.screen.home.HomeScreen
 import com.kurosu.sleepin.ui.screen.home.HomeViewModel
+import com.kurosu.sleepin.ui.screen.importer.web.ImportWebScreen
+import com.kurosu.sleepin.ui.screen.importer.web.ImportWebViewModel
 import com.kurosu.sleepin.ui.screen.course.CourseEditorScreen
 import com.kurosu.sleepin.ui.screen.course.CourseListScreen
 import com.kurosu.sleepin.ui.screen.course.CourseListViewModel
@@ -176,6 +178,16 @@ fun SleepInNavHost(
             )
             TimetableEditorScreen(
                 onBackClick = { navController.popBackStack() },
+                // Importing from a portal is the other way to fill a brand-new timetable, so it starts
+                // from the same screen as CSV import and carries the schedule the form already picked.
+                onImportFromPortal = { scheduleId ->
+                    navController.navigate(
+                        Screen.ImportWeb.createRoute(
+                            presetId = BUNDLED_DEMO_PRESET_ID,
+                            scheduleId = scheduleId
+                        )
+                    )
+                },
                 viewModel = vm
             )
         }
@@ -226,6 +238,57 @@ fun SleepInNavHost(
             )
         }
 
+        composable(
+            route = Screen.ImportWeb.route,
+            arguments = listOf(
+                navArgument(Screen.ImportWeb.ARG_PRESET_ID) {
+                    type = NavType.StringType
+                },
+                navArgument(Screen.ImportWeb.ARG_TIMETABLE_ID) {
+                    type = NavType.LongType
+                    defaultValue = Screen.ImportWeb.CREATE_TIMETABLE
+                },
+                navArgument(Screen.ImportWeb.ARG_SCHEDULE_ID) {
+                    type = NavType.LongType
+                    defaultValue = Screen.ImportWeb.NO_SCHEDULE
+                }
+            )
+        ) { backStackEntry ->
+            val presetId = backStackEntry.arguments
+                ?.getString(Screen.ImportWeb.ARG_PRESET_ID)
+                .orEmpty()
+            val timetableRaw = backStackEntry.arguments
+                ?.getLong(Screen.ImportWeb.ARG_TIMETABLE_ID)
+                ?: Screen.ImportWeb.CREATE_TIMETABLE
+            val scheduleRaw = backStackEntry.arguments
+                ?.getLong(Screen.ImportWeb.ARG_SCHEDULE_ID)
+                ?: Screen.ImportWeb.NO_SCHEDULE
+
+            val vm: ImportWebViewModel = viewModel(
+                key = "import_web_$presetId",
+                factory = ImportWebViewModel.factory(
+                    presetId = presetId,
+                    timetableId = timetableRaw.takeIf { it > 0L },
+                    scheduleId = scheduleRaw.takeIf { it > 0L },
+                    getImportPresetsUseCase = app.getImportPresetsUseCase,
+                    readImportScriptUseCase = app.readImportScriptUseCase,
+                    getSchedulesUseCase = app.getSchedulesUseCase,
+                    parseImportSubmissionUseCase = app.parseImportSubmissionUseCase,
+                    commitImportUseCase = app.commitImportUseCase
+                )
+            )
+            ImportWebScreen(
+                onBackClick = { navController.popBackStack() },
+                // The result is a timetable that has just been made current, so land on Home rather
+                // than unwinding to wherever the import was started from.
+                onFinished = {
+                    navController.popBackStack(Screen.Home.route, inclusive = false)
+                },
+                onOpenScheduleList = { navController.navigate(Screen.ScheduleList.route) },
+                viewModel = vm
+            )
+        }
+
         composable(Screen.Settings.route) {
             val vm: SettingsViewModel = viewModel(
                 factory = SettingsViewModel.factory(
@@ -243,3 +306,12 @@ fun SleepInNavHost(
         }
     }
 }
+
+/**
+ * Preset the new-timetable screen opens.
+ *
+ * Temporary plumbing: once the preset list exists, that screen navigates there instead and this
+ * constant disappears. It names the demo preset bundled in the APK, which needs no portal account and
+ * no network, so the whole flow — WebView, bridge, confirmation, write — can be exercised locally.
+ */
+private const val BUNDLED_DEMO_PRESET_ID = "generic-blank"

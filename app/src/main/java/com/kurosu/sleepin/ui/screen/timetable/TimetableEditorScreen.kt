@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -54,6 +55,7 @@ import com.kurosu.sleepin.data.csv.CsvImportTextDecoder
 @Composable
 fun TimetableEditorScreen(
     onBackClick: () -> Unit,
+    onImportFromPortal: (scheduleId: Long) -> Unit,
     viewModel: TimetableEditorViewModel
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -95,6 +97,8 @@ fun TimetableEditorScreen(
                     pendingExportText = event.content
                     exportCsvLauncher.launch(event.fileName)
                 }
+
+                is TimetableEditorEvent.ImportFromPortalReady -> onImportFromPortal(event.scheduleId)
             }
         }
     }
@@ -305,6 +309,26 @@ fun TimetableEditorScreen(
                     placeholder = { Text("spring_light") },
                     singleLine = true
                 )
+            }
+
+            if (!uiState.isEditMode) {
+                item {
+                    OutlinedButton(
+                        onClick = viewModel::onImportFromPortalClick,
+                        enabled = !uiState.isSaving && !uiState.isCsvBusy,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("从教务系统导入")
+                    }
+                }
+
+                item {
+                    Text(
+                        text = "从教务系统导入会新建一张课程表：课程、总周数与开学日期由导入方案提供，" +
+                            "上课时间取自上面选择的作息表。写入前会先显示要导入的内容让你确认。",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
 
             item {

@@ -66,6 +66,14 @@ data class TimetableEditorUiState(
 sealed interface TimetableEditorEvent {
     data object Saved : TimetableEditorEvent
     data class ExportCsvReady(val fileName: String, val content: String) : TimetableEditorEvent
+
+    /**
+     * The user asked to fill this new timetable from an academic portal.
+     *
+     * Carries the schedule because the import page would otherwise have to ask for it again, and this
+     * form is where schedules are chosen.
+     */
+    data class ImportFromPortalReady(val scheduleId: Long) : TimetableEditorEvent
 }
 
 /**
@@ -173,6 +181,28 @@ class TimetableEditorViewModel(
     /** Dismisses the CSV import confirmation dialog without importing. */
     fun dismissCsvImportConfirm() {
         _uiState.update { it.copy(showCsvImportConfirm = false) }
+    }
+
+    /**
+     * Opens the academic-portal import for a new timetable.
+     *
+     * Only the schedule is required here. A portal reports the timetable's name, week count and start
+     * date along with its courses, and the import shows all of them for confirmation before writing, so
+     * demanding the rest of this form would ask the user to type values the import is about to replace.
+     */
+    fun onImportFromPortalClick() {
+        if (timetableId != null) {
+            emitMessage("仅支持在新建课程表时从教务系统导入")
+            return
+        }
+        val scheduleId = _uiState.value.selectedScheduleId
+        if (scheduleId == null) {
+            emitMessage("请先选择作息表")
+            return
+        }
+        viewModelScope.launch {
+            _events.emit(TimetableEditorEvent.ImportFromPortalReady(scheduleId))
+        }
     }
 
     /**
