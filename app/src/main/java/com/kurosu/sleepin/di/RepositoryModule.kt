@@ -1,19 +1,24 @@
 package com.kurosu.sleepin.di
 
+import android.content.res.AssetManager
 import com.kurosu.sleepin.data.local.SleepInDatabase
 import com.kurosu.sleepin.data.csv.CsvExporter
 import com.kurosu.sleepin.data.csv.CsvImporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvExporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvImporter
+import com.kurosu.sleepin.data.importer.BundledImportPresetSource
 import com.kurosu.sleepin.data.importer.ImportPayloadParser
+import com.kurosu.sleepin.data.importer.ImportPresetIndexParser
 import com.kurosu.sleepin.data.preferences.SettingsPreferenceStore
 import com.kurosu.sleepin.data.repository.CourseRepositoryImpl
+import com.kurosu.sleepin.data.repository.ImportPresetRepositoryImpl
 import com.kurosu.sleepin.data.repository.ScheduleRepositoryImpl
 import com.kurosu.sleepin.data.repository.SettingsRepositoryImpl
 import com.kurosu.sleepin.data.repository.TimetableImportRepositoryImpl
 import com.kurosu.sleepin.data.repository.TimetableRepositoryImpl
 import com.kurosu.sleepin.data.update.GitHubUpdateRepositoryImpl
 import com.kurosu.sleepin.domain.repository.CourseRepository
+import com.kurosu.sleepin.domain.repository.ImportPresetRepository
 import com.kurosu.sleepin.domain.repository.ScheduleRepository
 import com.kurosu.sleepin.domain.repository.SettingsRepository
 import com.kurosu.sleepin.domain.repository.TimetableImportRepository
@@ -35,6 +40,22 @@ object RepositoryModule {
     fun provideScheduleCsvExporter(): ScheduleCsvExporter = ScheduleCsvExporter()
 
     fun provideImportPayloadParser(): ImportPayloadParser = ImportPayloadParser()
+
+    fun provideImportPresetIndexParser(): ImportPresetIndexParser = ImportPresetIndexParser()
+
+    /**
+     * Provides the reader for import presets.
+     *
+     * Only the bundled source is wired for now. A user's own presets and a downloaded index are added
+     * here as additional [com.kurosu.sleepin.data.importer.ImportPresetSource] entries; the repository
+     * merges them in list order, so later entries override earlier ones with the same id.
+     */
+    fun provideImportPresetRepository(
+        assets: AssetManager,
+        parser: ImportPresetIndexParser
+    ): ImportPresetRepository = ImportPresetRepositoryImpl(
+        sources = listOf(BundledImportPresetSource(assets = assets, parser = parser))
+    )
 
     /**
      * Provides the transactional writer used by the academic-portal import flow.
