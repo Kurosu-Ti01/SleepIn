@@ -234,6 +234,22 @@ fun CourseEditorScreen(
         }
     }
 
+    // A course may use a period the schedule does not define yet, in which case it has no class time
+    // until the user completes the schedule. The course is saved either way, so this notice is shown
+    // as a dialog that has to be acknowledged before leaving the editor.
+    uiState.unconfiguredPeriodsNotice?.let { notice ->
+        AlertDialog(
+            onDismissRequest = viewModel::consumeUnconfiguredPeriodsNotice,
+            title = { Text("作息表需要补全") },
+            text = { Text(notice) },
+            confirmButton = {
+                TextButton(onClick = viewModel::consumeUnconfiguredPeriodsNotice) {
+                    Text("我知道了")
+                }
+            }
+        )
+    }
+
     if (uiState.pendingConflicts.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = viewModel::dismissConflictDialog,

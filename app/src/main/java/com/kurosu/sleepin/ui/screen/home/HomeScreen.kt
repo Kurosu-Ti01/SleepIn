@@ -150,8 +150,8 @@ fun HomeScreen(
                                 shape = MaterialTheme.shapes.medium
                             ) {
                                 Text(
-                                    text = "第 ${formatPeriodNumbers(uiState.unconfiguredPeriods)} 节未在作息表中定义，” +
-                                        "相关课时没有上课时间、也不会触发上课提醒。点此补全作息表，补全后自动消失",
+                                    text = "第 ${formatPeriodNumbers(uiState.unconfiguredPeriods)} 节未在作息表中定义，" +
+                                        "这些节次没有上课时间。点此补全作息表，补全后自动消失",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer
