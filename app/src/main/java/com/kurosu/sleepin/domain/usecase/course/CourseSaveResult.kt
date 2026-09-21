@@ -6,7 +6,18 @@ package com.kurosu.sleepin.domain.usecase.course
  * The result is explicit so UI can show accurate feedback without parsing exception text.
  */
 sealed interface CourseSaveResult {
-    data class Success(val courseId: Long) : CourseSaveResult
+    /**
+     * The course was written.
+     *
+     * @param unconfiguredPeriods period numbers the saved sessions reference that the timetable's
+     *   schedule does not define. This is not a failure: the course is stored and rendered, it just has
+     *   no class time until the user completes the schedule. The UI reports it as a notice.
+     */
+    data class Success(
+        val courseId: Long,
+        val unconfiguredPeriods: List<Int> = emptyList()
+    ) : CourseSaveResult
+
     data class ValidationError(val message: String) : CourseSaveResult
     data class ConflictDetected(val conflicts: List<CourseConflict>) : CourseSaveResult
 }

@@ -112,10 +112,12 @@ class TimetableEditorViewModel(
     /**
      * Dismisses the schedule-mismatch notice and finally leaves the editor.
      *
-     * Leaving is deferred to here instead of happening inside `createAndImportCsv` because the dialog
-     * is the only channel on this screen that survives the editor being popped.
+     * Leave is deferred to here instead of happening inside `createAndImportCsv` because the dialog is
+     * the only channel on this screen that survives the editor being popped. Guarded so a second call
+     * cannot emit a duplicate Saved and pop the back stack twice.
      */
     fun consumeCsvScheduleMismatchNotice() {
+        if (_uiState.value.csvScheduleMismatchNotice == null) return
         _uiState.update { it.copy(csvScheduleMismatchNotice = null) }
         viewModelScope.launch { _events.emit(TimetableEditorEvent.Saved) }
     }
@@ -410,8 +412,8 @@ class TimetableEditorViewModel(
         append(report.importedSessionCount)
         append(" 条课时，但第 ")
         append(formatPeriodNumbers(report.periodsMissingFromSchedule))
-        append(" 节未在所选作息表中定义。\n\n")
-        append("请到「作息表」补全这些节次的时间，否则这些课时没有上课时间、也不会触发上课提醒。")
+        append(" 节未在所选作息表中定义，这些节次没有上课时间。\n\n")
+        append("请到「作息表」补全这些节次的时间。")
     }
 
     /**

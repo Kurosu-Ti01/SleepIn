@@ -3,7 +3,10 @@ package com.kurosu.sleepin.ui.screen.course
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kurosu.sleepin.domain.model.CourseSession
+import com.kurosu.sleepin.domain.model.MAX_SUPPORTED_PERIOD_NUMBER
 import com.kurosu.sleepin.domain.model.WeekType
+import com.kurosu.sleepin.domain.model.formatPeriodNumbers
 import com.kurosu.sleepin.domain.usecase.course.AddCourseUseCase
 import com.kurosu.sleepin.domain.usecase.course.CourseConflict
 import com.kurosu.sleepin.domain.usecase.course.CourseSaveResult
@@ -51,7 +54,14 @@ data class CourseEditorUiState(
     val maxPeriod: Int = 12,
     val sessions: List<EditableCourseSession> = listOf(EditableCourseSession()),
     val pendingConflicts: List<CourseConflict> = emptyList(),
-    val message: String? = null
+    val message: String? = null,
+    /**
+     * Tells the user that the saved course uses periods the schedule does not define yet.
+     *
+     * Kept separate from [message] because the editor closes as soon as the save succeeds, which would
+     * take a snackbar down before it could be read.
+     */
+    val unconfiguredPeriodsNotice: String? = null
 )
 
 sealed interface CourseEditorEvent {
@@ -71,6 +81,14 @@ class CourseEditorViewModel(
     private val updateCourseUseCase: UpdateCourseUseCase
 ) : ViewModel() {
 
+    /**
+     * Period numbers defined by the selected timetable's schedule.
+     *
+     * Held outside [CourseEditorUiState] because the screen never renders it: it is the context needed
+     * to report a period mismatch after a save.
+     */
+    private var schedulePeriods: Set<Int> = emptySet()
+
     private val _uiState = MutableStateFlow(CourseEditorUiState(isEditMode = courseId != null))
     val uiState: StateFlow<CourseEditorUiState> = _uiState.asStateFlow()
 
@@ -85,6 +103,18 @@ class CourseEditorViewModel(
         _uiState.update { it.copy(message = null) }
     }
 
+    /**
+     * Dismisses the unconfigured-periods notice and finally leaves the editor.
+     *
+     * Guarded so a second dismissal (a tap plus a resulting dismiss callback) cannot emit a duplicate
+     * Saved, which would pop the back stack twice.
+     */
+    fun consumeUnconfiguredPeriodsNotice() {
+        if (_uiState.value.unconfiguredPeriodsNotice == null) return
+        _uiState.update { it.copy(unconfiguredPeriodsNotice = null) }
+        viewModelScope.launch { _events.emit(CourseEditorEvent.Saved) }
+    }
+
     fun dismissConflictDialog() {
         _uiState.update { it.copy(pendingConflicts = emptyList()) }
     }
@@ -96,14 +126,9 @@ class CourseEditorViewModel(
 
     fun addSession() {
         val state = _uiState.value
-        val next = EditableCourseSession(
-            dayOfWeek = 1,
-            startPeriod = 1,
-            endPeriod = minOf(2, state.maxPeriod),
-            startWeekText = "1",
-            endWeekText = state.totalWeeks.toString()
-        )
-        _uiState.update { it.copy(sessions = it.sessions + next) }
+        _uiState.update {
+            it.copy(sessions = it.sessions + defaultSession(state.maxPeriod, state.totalWeeks))
+        }
     }
 
     fun removeSession(index: Int) {
@@ -177,7 +202,7 @@ class CourseEditorViewModel(
                 addCourseUseCase(
                     timetableId = timetableId,
                     totalWeeks = state.totalWeeks,
-                    maxPeriod = state.maxPeriod,
+                    schedulePeriods = schedulePeriods,
                     name = state.name,
                     teacher = state.teacher,
                     color = state.color,
@@ -190,7 +215,7 @@ class CourseEditorViewModel(
                     courseId = courseId,
                     timetableId = timetableId,
                     totalWeeks = state.totalWeeks,
-                    maxPeriod = state.maxPeriod,
+                    schedulePeriods = schedulePeriods,
                     name = state.name,
                     teacher = state.teacher,
                     color = state.color,
@@ -202,8 +227,19 @@ class CourseEditorViewModel(
 
             when (result) {
                 is CourseSaveResult.Success -> {
-                    _uiState.update { it.copy(isSaving = false) }
-                    _events.emit(CourseEditorEvent.Saved)
+                    val notice = if (result.unconfiguredPeriods.isEmpty()) {
+                        null
+                    } else {
+                        buildUnconfiguredPeriodsNotice(result.unconfiguredPeriods)
+                    }
+                    _uiState.update {
+                        it.copy(isSaving = false, unconfiguredPeriodsNotice = notice)
+                    }
+                    // Staying on the screen until the notice is acknowledged is the only way the user
+                    // actually reads it; `consumeUnconfiguredPeriodsNotice` emits Saved afterwards.
+                    if (notice == null) {
+                        _events.emit(CourseEditorEvent.Saved)
+                    }
                 }
                 is CourseSaveResult.ValidationError -> {
                     _uiState.update { it.copy(isSaving = false, message = result.message) }
@@ -233,65 +269,85 @@ class CourseEditorViewModel(
             }
 
             val scheduleDetail = getScheduleDetailUseCase(timetable.scheduleId)
-            val maxPeriod = scheduleDetail?.periods?.maxOfOrNull { it.periodNumber } ?: 12
+            schedulePeriods = scheduleDetail?.periods
+                ?.filter { period -> period.periodNumber > 0 }
+                ?.map { period -> period.periodNumber }
+                ?.toSet()
+                .orEmpty()
+
+            val detail = courseId?.let { id -> getCourseDetailUseCase(id) }
+            if (courseId != null && detail == null) {
+                _uiState.update { it.copy(isLoading = false, message = "未找到课程") }
+                return@launch
+            }
+
+            // The pickers must be able to express every period the course already uses. Bounding them by
+            // the schedule alone would silently downgrade an imported period the schedule does not
+            // define the moment the user opened a picker. The upper bound still applies: the picker's
+            // menu is not lazy, so an unbounded value would try to compose that many entries.
+            val maxPeriod = minOf(
+                maxOf(
+                    schedulePeriods.maxOrNull() ?: DEFAULT_MAX_PERIOD,
+                    detail?.sessions?.maxOfOrNull { session ->
+                        maxOf(session.startPeriod, session.endPeriod)
+                    } ?: 0
+                ),
+                MAX_SUPPORTED_PERIOD_NUMBER
+            )
+            val defaultSessions = listOf(defaultSession(maxPeriod, timetable.totalWeeks))
 
             _uiState.update {
                 it.copy(
                     isLoading = false,
                     totalWeeks = timetable.totalWeeks,
                     maxPeriod = maxPeriod,
-                    sessions = listOf(
-                        EditableCourseSession(
-                            dayOfWeek = 1,
-                            startPeriod = 1,
-                            endPeriod = minOf(2, maxPeriod),
-                            startWeekText = "1",
-                            endWeekText = timetable.totalWeeks.toString()
-                        )
-                    )
+                    name = detail?.course?.name.orEmpty(),
+                    teacher = detail?.course?.teacher.orEmpty(),
+                    note = detail?.course?.note.orEmpty(),
+                    color = detail?.course?.color ?: it.color,
+                    sessions = detail?.sessions
+                        ?.map { session -> session.toEditable(timetable.totalWeeks) }
+                        ?.ifEmpty { defaultSessions }
+                        ?: defaultSessions
                 )
-            }
-
-            if (courseId != null) {
-                val detail = getCourseDetailUseCase(courseId)
-                if (detail == null) {
-                    _uiState.update { it.copy(message = "未找到课程") }
-                    return@launch
-                }
-                _uiState.update {
-                    it.copy(
-                        name = detail.course.name,
-                        teacher = detail.course.teacher.orEmpty(),
-                        note = detail.course.note.orEmpty(),
-                        color = detail.course.color,
-                        sessions = detail.sessions.map { session ->
-                            EditableCourseSession(
-                                id = session.id,
-                                dayOfWeek = session.dayOfWeek,
-                                startPeriod = session.startPeriod,
-                                endPeriod = session.endPeriod,
-                                location = session.location.orEmpty(),
-                                weekType = session.weekType,
-                                startWeekText = (session.startWeek ?: 1).toString(),
-                                endWeekText = (session.endWeek ?: timetable.totalWeeks).toString(),
-                                customWeeks = session.customWeeks.toSet()
-                            )
-                        }.ifEmpty {
-                            listOf(
-                                EditableCourseSession(
-                                    dayOfWeek = 1,
-                                    startPeriod = 1,
-                                    endPeriod = minOf(2, maxPeriod),
-                                    startWeekText = "1",
-                                    endWeekText = timetable.totalWeeks.toString()
-                                )
-                            )
-                        }
-                    )
-                }
             }
         }
     }
+
+    /**
+     * Builds the notice shown when a saved course uses periods the schedule does not define.
+     *
+     * The course is stored and drawn either way — dropping it would lose what the user entered — so this
+     * text is the only signal that it has no class time until the schedule is completed.
+     */
+    private fun buildUnconfiguredPeriodsNotice(periods: List<Int>): String = buildString {
+        append("已保存，但第 ")
+        append(formatPeriodNumbers(periods))
+        append(" 节未在作息表中定义，这些节次没有上课时间。\n\n")
+        append("请到「作息表」补全这些节次的时间。")
+    }
+
+    /** New blank session for [maxPeriod], used both on load and when the user appends one. */
+    private fun defaultSession(maxPeriod: Int, totalWeeks: Int) = EditableCourseSession(
+        dayOfWeek = 1,
+        startPeriod = 1,
+        endPeriod = minOf(2, maxPeriod),
+        startWeekText = "1",
+        endWeekText = totalWeeks.toString()
+    )
+
+    /** Maps a persisted session onto the editor model without clipping its period range. */
+    private fun CourseSession.toEditable(totalWeeks: Int) = EditableCourseSession(
+        id = id,
+        dayOfWeek = dayOfWeek,
+        startPeriod = startPeriod,
+        endPeriod = endPeriod,
+        location = location.orEmpty(),
+        weekType = weekType,
+        startWeekText = (startWeek ?: 1).toString(),
+        endWeekText = (endWeek ?: totalWeeks).toString(),
+        customWeeks = customWeeks.toSet()
+    )
 
     private fun updateSession(
         index: Int,
@@ -305,6 +361,9 @@ class CourseEditorViewModel(
     }
 
     companion object {
+        /** Period count assumed when the timetable's schedule defines none at all. */
+        private const val DEFAULT_MAX_PERIOD = 12
+
         fun factory(
             timetableId: Long,
             courseId: Long?,
