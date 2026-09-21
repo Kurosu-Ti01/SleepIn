@@ -31,7 +31,9 @@ import com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.importer.CommitImportUseCase
+import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ParseImportSubmissionUseCase
+import com.kurosu.sleepin.domain.usecase.importer.ReadImportScriptUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
@@ -123,6 +125,11 @@ class SleepInApplication : Application() {
     lateinit var commitImportUseCase: CommitImportUseCase
         private set
 
+    lateinit var getImportPresetsUseCase: GetImportPresetsUseCase
+        private set
+    lateinit var readImportScriptUseCase: ReadImportScriptUseCase
+        private set
+
     private lateinit var seedDefaultScheduleUseCase: SeedDefaultScheduleUseCase
 
     // Dedicated app scope for lightweight startup tasks.
@@ -153,6 +160,11 @@ class SleepInApplication : Application() {
         val scheduleCsvExporter = RepositoryModule.provideScheduleCsvExporter()
         val importPayloadParser = RepositoryModule.provideImportPayloadParser()
         val timetableImportRepository = RepositoryModule.provideTimetableImportRepository(database)
+        val importPresetIndexParser = RepositoryModule.provideImportPresetIndexParser()
+        val importPresetRepository = RepositoryModule.provideImportPresetRepository(
+            assets = assets,
+            parser = importPresetIndexParser
+        )
 
         getSchedulesUseCase = GetSchedulesUseCase(scheduleRepository)
         getScheduleDetailUseCase = GetScheduleDetailUseCase(scheduleRepository)
@@ -201,6 +213,8 @@ class SleepInApplication : Application() {
             timetableImportRepository = timetableImportRepository,
             getTimetableDetailUseCase = getTimetableDetailUseCase
         )
+        getImportPresetsUseCase = GetImportPresetsUseCase(importPresetRepository)
+        readImportScriptUseCase = ReadImportScriptUseCase(importPresetRepository)
     }
 
     /**
