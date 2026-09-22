@@ -1,7 +1,9 @@
 package com.kurosu.sleepin.data.importer
 
 import android.content.res.AssetManager
+import com.kurosu.sleepin.domain.model.importer.CustomImportPresetDraft
 import com.kurosu.sleepin.domain.model.importer.ImportPreset
+import com.kurosu.sleepin.domain.model.importer.ImportPresetAddResult
 import com.kurosu.sleepin.domain.model.importer.ImportPresetIndexParseResult
 import com.kurosu.sleepin.domain.model.importer.ImportPresetSourceKind
 import java.io.IOException
@@ -32,6 +34,30 @@ interface ImportPresetSource {
      * because this is the step that actually resolves it to a file.
      */
     suspend fun readScript(scriptPath: String): String?
+}
+
+/**
+ * A source the user can add presets to and remove them from.
+ *
+ * Only the user's own presets are writable: the bundled ones are part of the APK, and a downloaded
+ * index is replaced wholesale when it is refreshed. Keeping the writable half a separate interface
+ * means a read-only source cannot be handed to the repository by mistake.
+ */
+interface MutableImportPresetSource : ImportPresetSource {
+
+    /**
+     * Stores [draft] as a new preset.
+     *
+     * The implementation allocates the id, because only it can see which ids are already taken.
+     */
+    suspend fun add(draft: CustomImportPresetDraft): ImportPresetAddResult
+
+    /**
+     * Removes the preset identified by [presetId].
+     *
+     * @return true when the preset is gone, including when it was not there to begin with.
+     */
+    suspend fun remove(presetId: String): Boolean
 }
 
 /**

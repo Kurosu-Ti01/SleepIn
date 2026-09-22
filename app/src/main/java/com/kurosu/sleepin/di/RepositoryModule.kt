@@ -7,8 +7,12 @@ import com.kurosu.sleepin.data.csv.CsvImporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvExporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvImporter
 import com.kurosu.sleepin.data.importer.BundledImportPresetSource
+import com.kurosu.sleepin.data.importer.CustomImportPresetStore
 import com.kurosu.sleepin.data.importer.ImportPayloadParser
+import com.kurosu.sleepin.data.importer.ImportPresetFileStore
 import com.kurosu.sleepin.data.importer.ImportPresetIndexParser
+import com.kurosu.sleepin.data.importer.MutableImportPresetSource
+import com.kurosu.sleepin.data.preferences.ImportPresetPreferenceStore
 import com.kurosu.sleepin.data.preferences.SettingsPreferenceStore
 import com.kurosu.sleepin.data.repository.CourseRepositoryImpl
 import com.kurosu.sleepin.data.repository.ImportPresetRepositoryImpl
@@ -24,6 +28,7 @@ import com.kurosu.sleepin.domain.repository.SettingsRepository
 import com.kurosu.sleepin.domain.repository.TimetableImportRepository
 import com.kurosu.sleepin.domain.repository.TimetableRepository
 import com.kurosu.sleepin.domain.repository.UpdateRepository
+import java.io.File
 
 /**
  * Temporary manual repository provider.
@@ -43,18 +48,34 @@ object RepositoryModule {
 
     fun provideImportPresetIndexParser(): ImportPresetIndexParser = ImportPresetIndexParser()
 
+    /** Provides the file store that keeps the scripts of the user's own presets. */
+    fun provideImportPresetFileStore(filesDirectory: File): ImportPresetFileStore =
+        ImportPresetFileStore(File(filesDirectory, ImportPresetFileStore.DIRECTORY_NAME))
+
+    /** Provides the only writable preset source: the presets the user added themselves. */
+    fun provideCustomImportPresetStore(
+        dataStore: ImportPresetPreferenceStore,
+        fileStore: ImportPresetFileStore
+    ): MutableImportPresetSource = CustomImportPresetStore(dataStore = dataStore, fileStore = fileStore)
+
     /**
      * Provides the reader for import presets.
      *
-     * Only the bundled source is wired for now. A user's own presets and a downloaded index are added
-     * here as additional [com.kurosu.sleepin.data.importer.ImportPresetSource] entries; the repository
-     * merges them in list order, so later entries override earlier ones with the same id.
+     * The bundled source comes first and the user's own presets after it, so a preset the user added
+     * replaces a bundled one with the same id. A downloaded index joins the list in the same way.
      */
     fun provideImportPresetRepository(
         assets: AssetManager,
-        parser: ImportPresetIndexParser
+        parser: ImportPresetIndexParser,
+        customPresets: MutableImportPresetSource
     ): ImportPresetRepository = ImportPresetRepositoryImpl(
-        sources = listOf(BundledImportPresetSource(assets = assets, parser = parser))
+        // The user's own presets take part in the merge and are also the only writable source, so they
+        // appear in both roles.
+        sources = listOf(
+            BundledImportPresetSource(assets = assets, parser = parser),
+            customPresets
+        ),
+        customPresets = customPresets
     )
 
     /**

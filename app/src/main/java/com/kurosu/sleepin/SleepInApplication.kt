@@ -3,6 +3,7 @@ package com.kurosu.sleepin
 import android.app.Application
 import androidx.room.InvalidationTracker
 import androidx.glance.appwidget.updateAll
+import com.kurosu.sleepin.data.preferences.importPresetDataStore
 import com.kurosu.sleepin.data.preferences.settingsDataStore
 import com.kurosu.sleepin.di.DatabaseModule
 import com.kurosu.sleepin.di.RepositoryModule
@@ -30,10 +31,12 @@ import com.kurosu.sleepin.domain.usecase.timetable.SetActiveTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
+import com.kurosu.sleepin.domain.usecase.importer.AddCustomImportPresetUseCase
 import com.kurosu.sleepin.domain.usecase.importer.CommitImportUseCase
 import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ParseImportSubmissionUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ReadImportScriptUseCase
+import com.kurosu.sleepin.domain.usecase.importer.RemoveCustomImportPresetUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
@@ -129,6 +132,10 @@ class SleepInApplication : Application() {
         private set
     lateinit var readImportScriptUseCase: ReadImportScriptUseCase
         private set
+    lateinit var addCustomImportPresetUseCase: AddCustomImportPresetUseCase
+        private set
+    lateinit var removeCustomImportPresetUseCase: RemoveCustomImportPresetUseCase
+        private set
 
     private lateinit var seedDefaultScheduleUseCase: SeedDefaultScheduleUseCase
 
@@ -161,9 +168,15 @@ class SleepInApplication : Application() {
         val importPayloadParser = RepositoryModule.provideImportPayloadParser()
         val timetableImportRepository = RepositoryModule.provideTimetableImportRepository(database)
         val importPresetIndexParser = RepositoryModule.provideImportPresetIndexParser()
+        val importPresetFileStore = RepositoryModule.provideImportPresetFileStore(filesDir)
+        val customImportPresetStore = RepositoryModule.provideCustomImportPresetStore(
+            dataStore = importPresetDataStore,
+            fileStore = importPresetFileStore
+        )
         val importPresetRepository = RepositoryModule.provideImportPresetRepository(
             assets = assets,
-            parser = importPresetIndexParser
+            parser = importPresetIndexParser,
+            customPresets = customImportPresetStore
         )
 
         getSchedulesUseCase = GetSchedulesUseCase(scheduleRepository)
@@ -215,6 +228,8 @@ class SleepInApplication : Application() {
         )
         getImportPresetsUseCase = GetImportPresetsUseCase(importPresetRepository)
         readImportScriptUseCase = ReadImportScriptUseCase(importPresetRepository)
+        addCustomImportPresetUseCase = AddCustomImportPresetUseCase(importPresetRepository)
+        removeCustomImportPresetUseCase = RemoveCustomImportPresetUseCase(importPresetRepository)
     }
 
     /**
