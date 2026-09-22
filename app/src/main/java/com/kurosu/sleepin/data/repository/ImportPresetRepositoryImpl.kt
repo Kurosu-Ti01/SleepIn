@@ -1,7 +1,10 @@
 package com.kurosu.sleepin.data.repository
 
 import com.kurosu.sleepin.data.importer.ImportPresetSource
+import com.kurosu.sleepin.data.importer.MutableImportPresetSource
+import com.kurosu.sleepin.domain.model.importer.CustomImportPresetDraft
 import com.kurosu.sleepin.domain.model.importer.ImportPreset
+import com.kurosu.sleepin.domain.model.importer.ImportPresetAddResult
 import com.kurosu.sleepin.domain.repository.ImportPresetRepository
 
 /**
@@ -13,9 +16,14 @@ import com.kurosu.sleepin.domain.repository.ImportPresetRepository
  *
  * Because a preset records only the kind of source it came from, at most one source per kind may be
  * registered: with two, a preset would be read through whichever one happened to come first.
+ *
+ * @param customPresets the one writable source. Separate from [sources] because adding and removing
+ *   only ever applies to the user's own presets, and passing it explicitly makes that visible here
+ *   instead of leaving it to be discovered by searching the list for a writable entry.
  */
 class ImportPresetRepositoryImpl(
-    private val sources: List<ImportPresetSource>
+    private val sources: List<ImportPresetSource>,
+    private val customPresets: MutableImportPresetSource
 ) : ImportPresetRepository {
 
     override suspend fun getPresets(): List<ImportPreset> {
@@ -33,4 +41,10 @@ class ImportPresetRepositoryImpl(
 
     override suspend fun readScript(preset: ImportPreset): String? =
         sources.firstOrNull { source -> source.kind == preset.source }?.readScript(preset.scriptPath)
+
+    override suspend fun addCustomPreset(draft: CustomImportPresetDraft): ImportPresetAddResult =
+        customPresets.add(draft)
+
+    override suspend fun removeCustomPreset(presetId: String): Boolean =
+        customPresets.remove(presetId)
 }

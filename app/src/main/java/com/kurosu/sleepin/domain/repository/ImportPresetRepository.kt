@@ -1,6 +1,8 @@
 package com.kurosu.sleepin.domain.repository
 
+import com.kurosu.sleepin.domain.model.importer.CustomImportPresetDraft
 import com.kurosu.sleepin.domain.model.importer.ImportPreset
+import com.kurosu.sleepin.domain.model.importer.ImportPresetAddResult
 
 /**
  * Contract for reading the import presets available on this device.
@@ -25,4 +27,19 @@ interface ImportPresetRepository {
      * — distinguishable from a programming error at the call site.
      */
     suspend fun readScript(preset: ImportPreset): String?
+
+    /**
+     * Stores [draft] as one of the user's own presets.
+     *
+     * The repository decides where a user's own preset belongs; callers only describe it. Validation
+     * of the draft happens before this call, in the use case that accepts the form.
+     */
+    suspend fun addCustomPreset(draft: CustomImportPresetDraft): ImportPresetAddResult
+
+    /**
+     * Removes the user's own preset identified by [presetId].
+     *
+     * @return true when it is gone, including when it was not there to begin with.
+     */
+    suspend fun removeCustomPreset(presetId: String): Boolean
 }

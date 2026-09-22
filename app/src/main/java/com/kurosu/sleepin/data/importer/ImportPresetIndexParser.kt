@@ -54,8 +54,8 @@ class ImportPresetIndexParser {
             val path = "presets[$index]"
 
             val id = preset.id?.trim().orEmpty()
-            if (!PRESET_ID_PATTERN.matches(id)) {
-                return invalid("$path.id must match ${PRESET_ID_PATTERN.pattern}, got '$id'")
+            if (!isValidPresetId(id)) {
+                return invalid("$path.id must be a lowercase slug, got '$id'")
             }
             if (!seenIds.add(id)) {
                 return invalid("$path.id '$id' is used by another preset")
@@ -132,7 +132,6 @@ class ImportPresetIndexParser {
         const val SUPPORTED_SCHEMA_VERSION = 1
         const val MIN_INDEX_VERSION = 1
 
-        val PRESET_ID_PATTERN = Regex("^[a-z0-9][a-z0-9-]{1,63}$")
         val INITIAL_PATTERN = Regex("^[A-Z]$")
         val SHA256_PATTERN = Regex("^[0-9a-f]{64}$")
 
@@ -142,33 +141,6 @@ class ImportPresetIndexParser {
         val indexJson: Json = Json {
             ignoreUnknownKeys = true
         }
-    }
-}
-
-/**
- * Whether [path] may be used as a script reference for the preset identified by [presetId].
- *
- * An index is data, and a remote one is data the app did not author, while the file it names is read
- * and executed inside the WebView. Requiring a relative path inside the preset's own folder is what
- * stops a tampered index from pointing the app at some other file in its private storage.
- */
-internal fun isSafeScriptPath(path: String, presetId: String): Boolean =
-    isSafeRelativePath(path) && path.startsWith("presets/$presetId/")
-
-/**
- * Whether [path] is a relative path that cannot escape the directory it is resolved against.
- *
- * `\`, `:` and `%` are rejected as well as traversal segments. None of them can appear in a path this
- * app resolves today, and an encoded form (`%2e%2e`) would only become dangerous once some consumer
- * decodes it — which is exactly the kind of later change that should not be able to turn a validated
- * path into an escape.
- */
-internal fun isSafeRelativePath(path: String): Boolean {
-    if (path.isEmpty()) return false
-    if (path.startsWith("/") || path.startsWith("\\")) return false
-    if (path.contains('\\') || path.contains(':') || path.contains('%')) return false
-    return path.split('/').none { segment ->
-        segment.isEmpty() || segment == "." || segment == ".."
     }
 }
 
