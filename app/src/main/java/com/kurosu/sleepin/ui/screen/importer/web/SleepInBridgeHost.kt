@@ -50,6 +50,9 @@ interface ImportWebViewHandle {
      */
     fun evaluate(script: String, onResult: ((String?) -> Unit)? = null)
 
+    /** Changes the page identity presented on its next request. */
+    fun setUserAgent(value: String)
+
     /** Reloads the page, which also resets its globals so a script can be injected again. */
     fun reload()
 }

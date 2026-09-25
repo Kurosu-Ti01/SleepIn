@@ -23,7 +23,7 @@ class ImportPresetIndexParserTest {
     @Test
     fun parse_acceptsACompleteIndex() {
         val result = parser.parse(
-            indexOf(presetJson(scriptSha256 = VALID_HASH)),
+            indexOf(presetJson(scriptSha256 = VALID_HASH, group = "GENERAL", initial = "Y")),
             ImportPresetSourceKind.BUNDLED
         )
 
@@ -32,14 +32,60 @@ class ImportPresetIndexParserTest {
         assertEquals(3, index.indexVersion)
 
         val preset = index.presets.single()
-        assertEquals("generic-blank", preset.id)
-        assertEquals("演示导入", preset.name)
+        assertEquals("sample-preset", preset.id)
+        assertEquals("Sample preset", preset.name)
         assertEquals(ImportPresetGroup.GENERAL, preset.group)
         assertEquals("Y", preset.initial)
-        assertEquals("presets/generic-blank/blank.js", preset.scriptPath)
+        assertEquals("presets/sample-preset/script.js", preset.scriptPath)
         // Hashes are normalized so a comparison against a downloaded file cannot fail on casing.
         assertEquals(VALID_HASH.lowercase(), preset.scriptSha256)
         assertEquals(ImportPresetSourceKind.BUNDLED, preset.source)
+        assertNull(preset.schoolId)
+    }
+
+    @Test
+    fun parse_attachesSchoolMetadataToEachScript() {
+        val json = """
+            {
+              "schemaVersion": 1,
+              "indexVersion": 3,
+              "schools": [{"id":"school-sample","name":"测试高校","code":"TEST-001","aliases":["测试简称"]}],
+              "presets": [{"id":"school-sample-undergrad","name":"本科方案","schoolId":"school-sample","group":"UNDERGRADUATE",
+                "initial":"S","startUrl":"https://portal.example.invalid","script":"presets/school-sample-undergrad/script.js",
+                "description":"请先登录","maintainer":"SleepIn"}]
+            }
+        """.trimIndent()
+
+        val index = (parser.parse(json, ImportPresetSourceKind.BUNDLED) as ImportPresetIndexParseResult.Parsed).index
+
+        assertEquals("测试高校", index.schools.single().name)
+        assertEquals("school-sample", index.presets.single().schoolId)
+        assertEquals("TEST-001", index.presets.single().schoolCode)
+        assertEquals(listOf("测试简称"), index.presets.single().schoolAliases)
+    }
+
+    @Test
+    fun parse_rejectsPresetPointingToUnknownSchool() {
+        val json = indexOf(
+            presetJson(name = "Sample preset", schoolId = "missing")
+        )
+
+        val result = parser.parse(json, ImportPresetSourceKind.BUNDLED)
+
+        assertTrue((result as ImportPresetIndexParseResult.Invalid).message.contains("schoolId"))
+    }
+
+    @Test
+    fun parse_rejectsDuplicateSchoolIds() {
+        val json = """
+            {"schemaVersion":1,"indexVersion":1,
+             "schools":[{"id":"school-a","name":"甲校"},{"id":"school-a","name":"乙校"}],
+             "presets":[]}
+        """.trimIndent()
+
+        val result = parser.parse(json, ImportPresetSourceKind.BUNDLED)
+
+        assertTrue((result as ImportPresetIndexParseResult.Invalid).message.contains("another school"))
     }
 
     @Test
@@ -144,13 +190,13 @@ class ImportPresetIndexParserTest {
             ImportPresetSourceKind.BUNDLED
         )
 
-        assertTrue((result as ImportPresetIndexParseResult.Invalid).message.contains("presets/generic-blank/"))
+        assertTrue((result as ImportPresetIndexParseResult.Invalid).message.contains("presets/sample-preset/"))
     }
 
     @Test
     fun parse_rejectsScriptPathWithTraversal() {
         val result = parser.parse(
-            indexOf(presetJson(script = "presets/generic-blank/../../../shared_prefs/app.xml")),
+            indexOf(presetJson(script = "presets/sample-preset/../../../shared_prefs/app.xml")),
             ImportPresetSourceKind.BUNDLED
         )
 
@@ -197,16 +243,16 @@ class ImportPresetIndexParserTest {
               "schemaVersion": 1,
               "indexVersion": 1,
               "presets": [
-                { "id": "generic-blank", "name": "演示导入", "group": "GENERAL", "initial": "Y",
-                  "startUrl": "", "script": "presets\\generic-blank\\blank.js",
-                  "description": "说明", "maintainer": "SleepIn" }
+                { "id": "sample-preset", "name": "Sample preset", "group": "GENERAL", "initial": "S",
+                  "startUrl": "", "script": "presets\\sample-preset\\script.js",
+                  "description": "Sample description", "maintainer": "SleepIn" }
               ]
             }
         """.trimIndent()
 
         val result = parser.parse(json, ImportPresetSourceKind.BUNDLED)
 
-        assertTrue((result as ImportPresetIndexParseResult.Invalid).message.contains("presets/generic-blank/"))
+        assertTrue((result as ImportPresetIndexParseResult.Invalid).message.contains("presets/sample-preset/"))
     }
 
     @Test
@@ -220,13 +266,12 @@ class ImportPresetIndexParserTest {
     }
 
     @Test
-    fun parse_acceptsTheIndexShippedInTheApp() {
-        // Guards a packaging mistake nothing else would catch: a bundled index that fails to parse
-        // leaves the preset list silently empty at runtime.
+    fun parse_acceptsTheEmptyIndexShippedInTheApp() {
+        // School-specific presets are added only after they are reviewed and verified.
         val result = parser.parse(shippedIndexJson(), ImportPresetSourceKind.BUNDLED)
 
         val index = (result as ImportPresetIndexParseResult.Parsed).index
-        assertTrue("the bundled index should ship at least one preset", index.presets.isNotEmpty())
+        assertTrue("the bundled index is intentionally empty until a preset is verified", index.presets.isEmpty())
         index.presets.forEach { preset ->
             assertEquals(ImportPresetSourceKind.BUNDLED, preset.source)
             assertTrue(
@@ -260,17 +305,19 @@ class ImportPresetIndexParserTest {
     }
 
     private fun presetJson(
-        id: String = "generic-blank",
-        name: String = "演示导入",
+        id: String = "sample-preset",
+        name: String = "Sample preset",
         group: String = "GENERAL",
         initial: String = "Y",
         startUrl: String = "",
-        script: String = "presets/generic-blank/blank.js",
+        script: String = "presets/sample-preset/script.js",
         scriptSha256: String? = null,
-        description: String = "用固定示例数据走完整个导入流程。",
+        description: String = "Sample import preset.",
+        schoolId: String? = null,
         maintainer: String = "SleepIn"
     ): String = buildString {
         append("""{ "id": "$id", "name": "$name", "group": "$group", "initial": "$initial",""")
+        if (schoolId != null) append(""" "schoolId": "$schoolId",""")
         append(""" "startUrl": "$startUrl", "script": "$script",""")
         if (scriptSha256 != null) append(""" "scriptSha256": "$scriptSha256",""")
         append(""" "description": "$description", "maintainer": "$maintainer" }""")

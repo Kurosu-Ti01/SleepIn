@@ -4,6 +4,7 @@ import com.kurosu.sleepin.domain.model.importer.ImportPreset
 import com.kurosu.sleepin.domain.model.importer.ImportPresetGroup
 import com.kurosu.sleepin.domain.model.importer.ImportPresetIndex
 import com.kurosu.sleepin.domain.model.importer.ImportPresetIndexParseResult
+import com.kurosu.sleepin.domain.model.importer.ImportPresetSchool
 import com.kurosu.sleepin.domain.model.importer.ImportPresetSourceKind
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -48,6 +49,22 @@ class ImportPresetIndexParser {
             return invalid("indexVersion must be at least $MIN_INDEX_VERSION")
         }
 
+        val schools = mutableMapOf<String, ImportPresetSchool>()
+        dto.schools.orEmpty().forEachIndexed { index, school ->
+            val path = "schools[$index]"
+            val id = school.id?.trim().orEmpty()
+            if (!isValidPresetId(id)) return invalid("$path.id must be a lowercase slug, got '$id'")
+            if (id in schools) return invalid("$path.id '$id' is used by another school")
+            val name = school.name?.trim().orEmpty()
+            if (name.isEmpty()) return invalid("$path.name is required")
+            schools[id] = ImportPresetSchool(
+                id = id,
+                name = name,
+                code = school.code.trimmedOrNull(),
+                aliases = school.aliases.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            )
+        }
+
         val presets = mutableListOf<ImportPreset>()
         val seenIds = mutableSetOf<String>()
         dto.presets.orEmpty().forEachIndexed { index, preset ->
@@ -63,6 +80,12 @@ class ImportPresetIndexParser {
 
             val name = preset.name?.trim().orEmpty()
             if (name.isEmpty()) return invalid("$path.name is required")
+
+            val schoolId = preset.schoolId.trimmedOrNull()
+            val school = schoolId?.let(schools::get)
+            if (schoolId != null && school == null) {
+                return invalid("$path.schoolId '$schoolId' does not name a school in the index")
+            }
 
             val groupName = preset.group?.trim()?.uppercase().orEmpty()
             val group = PRESET_GROUP_BY_NAME[groupName]
@@ -106,7 +129,11 @@ class ImportPresetIndexParser {
                 scriptSha256 = scriptSha256,
                 description = description,
                 maintainer = maintainer,
-                source = source
+                source = source,
+                schoolId = school?.id,
+                schoolName = school?.name,
+                schoolCode = school?.code,
+                schoolAliases = school?.aliases.orEmpty()
             )
         }
 
@@ -114,7 +141,8 @@ class ImportPresetIndexParser {
             ImportPresetIndex(
                 schemaVersion = schemaVersion,
                 indexVersion = indexVersion,
-                presets = presets
+                presets = presets,
+                schools = schools.values.toList()
             )
         )
     }
@@ -151,7 +179,17 @@ class ImportPresetIndexParser {
 internal data class ImportPresetIndexDto(
     val schemaVersion: Int? = null,
     val indexVersion: Int? = null,
+    val schools: List<ImportPresetSchoolDto>? = null,
     val presets: List<ImportPresetDto>? = null
+)
+
+/** Wire shape of one school directory entry. */
+@Serializable
+internal data class ImportPresetSchoolDto(
+    val id: String? = null,
+    val name: String? = null,
+    val code: String? = null,
+    val aliases: List<String>? = null
 )
 
 /**
@@ -161,6 +199,7 @@ internal data class ImportPresetIndexDto(
 internal data class ImportPresetDto(
     val id: String? = null,
     val name: String? = null,
+    val schoolId: String? = null,
     val group: String? = null,
     val initial: String? = null,
     val startUrl: String? = null,

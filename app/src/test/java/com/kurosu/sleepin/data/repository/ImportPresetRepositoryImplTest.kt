@@ -35,12 +35,12 @@ class ImportPresetRepositoryImplTest {
         val repository = repositoryOf(
             FakeImportPresetSource(
                 ImportPresetSourceKind.BUNDLED,
-                listOf(preset(id = "generic-blank", name = "内置名称"))
+                listOf(preset(id = "sample-preset", name = "内置名称"))
             ),
             FakeMutableImportPresetSource(
                 presets = listOf(
                     preset(
-                        id = "generic-blank",
+                        id = "sample-preset",
                         name = "我的名称",
                         source = ImportPresetSourceKind.CUSTOM
                     )
@@ -127,7 +127,7 @@ class ImportPresetRepositoryImplTest {
             name = "示例大学",
             group = ImportPresetGroup.UNDERGRADUATE,
             initial = "S",
-            startUrl = "https://jw.example.edu.cn",
+            startUrl = "https://portal.example.invalid",
             description = "",
             maintainer = "",
             scriptText = "console.log('x')"

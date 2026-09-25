@@ -3,15 +3,16 @@ package com.kurosu.sleepin.ui.screen.importer.web
 import android.os.Handler
 import android.os.Looper
 import android.webkit.ValueCallback
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,17 +25,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -43,6 +46,8 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -57,8 +62,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -88,9 +97,15 @@ fun ImportWebScreen(
 
     val webViewState = remember { mutableStateOf<WebView?>(null) }
     var addressText by remember { mutableStateOf("") }
-    var isAddressFocused by remember { mutableStateOf(false) }
+    var isAddressEditing by remember { mutableStateOf(false) }
+    val addressFocusRequester = remember { FocusRequester() }
+    val addressInteractionSource = remember { MutableInteractionSource() }
+    val isAddressFocused by addressInteractionSource.collectIsFocusedAsState()
     var scheduleExpanded by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
+    var showImportHelp by remember { mutableStateOf(false) }
+    var userAgentMode by remember { mutableStateOf(ImportUserAgentMode.MOBILE) }
+    val mobileUserAgent = remember(context) { WebSettings.getDefaultUserAgent(context) }
 
     // The ViewModel drives the bridge but must not hold a WebView, so the screen lends it one.
     val pageHandle = remember(viewModel) {
@@ -101,6 +116,10 @@ fun ImportWebScreen(
                     ValueCallback<String> { value -> notify(value) }
                 }
                 view.evaluateJavascript(script, callback)
+            }
+
+            override fun setUserAgent(userAgent: String) {
+                webViewState.value?.settings?.userAgentString = userAgent
             }
 
             override fun reload() {
@@ -146,12 +165,16 @@ fun ImportWebScreen(
         viewModel.consumeMessage()
     }
 
-    // Keep the address field in step with the page, but never overwrite what the user is typing: a
-    // focused field is one the user is editing, so the page's URL must not win.
-    LaunchedEffect(uiState.pageUrl, isAddressFocused) {
-        if (!isAddressFocused) {
+    // Keep the address in step with the page while it is in title mode, but do not overwrite the URL
+    // during editing or while the text field still owns focus.
+    LaunchedEffect(uiState.pageUrl, isAddressEditing, isAddressFocused) {
+        if (!isAddressEditing && !isAddressFocused) {
             addressText = uiState.pageUrl.ifBlank { uiState.startUrl.orEmpty() }
         }
+    }
+
+    LaunchedEffect(isAddressEditing) {
+        if (isAddressEditing && uiState.isStarted) addressFocusRequester.requestFocus()
     }
 
     // Back is layered: the first press closes the keyboard if the address field has it (which is what a
@@ -159,7 +182,11 @@ fun ImportWebScreen(
     // nowhere left to go does it leave the screen.
     BackHandler {
         when {
-            isAddressFocused -> focusManager.clearFocus()
+            isAddressEditing || isAddressFocused -> {
+                focusManager.clearFocus()
+                isAddressEditing = false
+                addressText = uiState.pageUrl.ifBlank { uiState.startUrl.orEmpty() }
+            }
             webViewState.value?.canGoBack() == true -> webViewState.value?.goBack()
             else -> onBackClick()
         }
@@ -202,6 +229,32 @@ fun ImportWebScreen(
                 uiState = uiState,
                 menuExpanded = menuExpanded,
                 onMenuExpandedChange = { expanded -> menuExpanded = expanded },
+                userAgentMode = userAgentMode,
+                addressEditing = isAddressEditing,
+                addressText = addressText,
+                addressInteractionSource = addressInteractionSource,
+                addressFocusRequester = addressFocusRequester,
+                onAddressTextChange = { value -> addressText = value },
+                onAddressEditClick = { isAddressEditing = true },
+                onAddressSubmit = { raw ->
+                    normalizeAddressInput(raw)?.let { target ->
+                        focusManager.clearFocus()
+                        isAddressEditing = false
+                        webViewState.value?.loadUrl(target)
+                    }
+                },
+                onAddressCancel = {
+                    focusManager.clearFocus()
+                    isAddressEditing = false
+                    addressText = uiState.pageUrl.ifBlank { uiState.startUrl.orEmpty() }
+                },
+                onUserAgentModeChange = { mode ->
+                    if (mode != userAgentMode) {
+                        userAgentMode = mode
+                        pageHandle.setUserAgent(userAgentForMode(mobileUserAgent, mode))
+                        viewModel.onReloadClick()
+                    }
+                },
                 onBackClick = onBackClick,
                 onReloadClick = viewModel::onReloadClick
             )
@@ -213,24 +266,25 @@ fun ImportWebScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
-            if (uiState.isStarted) {
-                ImportRunningContent(
+            when (uiState.stage()) {
+                ImportWebStage.Running -> ImportRunningContent(
                     uiState = uiState,
-                    addressText = addressText,
-                    onAddressTextChange = { value -> addressText = value },
-                    onAddressFocusChange = { focused -> isAddressFocused = focused },
-                    onAddressSubmit = { raw ->
-                        normalizeAddressInput(raw)?.let { target -> webViewState.value?.loadUrl(target) }
-                    },
+                    mobileUserAgent = mobileUserAgent,
+                    userAgentMode = userAgentMode,
                     onRunScript = viewModel::onRunScriptClick,
                     webViewState = webViewState,
                     pageHandle = pageHandle,
                     bridgeHost = bridgeHost,
                     pageListener = pageListener,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    showImportHelp = showImportHelp,
+                    onImportHelpChange = { showImportHelp = it }
                 )
-            } else {
-                ImportPreparationContent(
+
+                // Preparation also covers "still loading" and "the script could not be read"; it shows a
+                // spinner in the first case and the reason in the second.
+                ImportWebStage.Loading,
+                ImportWebStage.Preparation -> ImportPreparationContent(
                     uiState = uiState,
                     scheduleExpanded = scheduleExpanded,
                     onScheduleExpandedChange = { expanded -> scheduleExpanded = expanded },
@@ -249,21 +303,64 @@ private fun ImportTopBar(
     uiState: ImportWebUiState,
     menuExpanded: Boolean,
     onMenuExpandedChange: (Boolean) -> Unit,
+    userAgentMode: ImportUserAgentMode,
+    addressEditing: Boolean,
+    addressText: String,
+    addressInteractionSource: MutableInteractionSource,
+    addressFocusRequester: FocusRequester,
+    onAddressTextChange: (String) -> Unit,
+    onAddressEditClick: () -> Unit,
+    onAddressSubmit: (String) -> Unit,
+    onAddressCancel: () -> Unit,
+    onUserAgentModeChange: (ImportUserAgentMode) -> Unit,
     onBackClick: () -> Unit,
     onReloadClick: () -> Unit
 ) {
     TopAppBar(
         title = {
-            Text(
-                text = uiState.pageTitle.ifBlank {
-                    uiState.presetName.ifBlank { "从教务系统导入" }
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (uiState.isStarted && addressEditing) {
+                OutlinedTextField(
+                    value = addressText,
+                    onValueChange = onAddressTextChange,
+                    singleLine = true,
+                    placeholder = { Text("输入网址") },
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { onAddressSubmit(addressText) }),
+                    trailingIcon = {
+                        IconButton(onClick = { onAddressSubmit(addressText) }) {
+                            Icon(Icons.Filled.Search, contentDescription = "打开网址")
+                        }
+                    },
+                    interactionSource = addressInteractionSource,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(addressFocusRequester)
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = uiState.isStarted, onClick = onAddressEditClick),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = uiState.pageTitle.ifBlank {
+                            uiState.presetName.ifBlank { "从教务系统导入" }
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (uiState.isStarted) {
+                        Icon(Icons.Filled.Search, contentDescription = "编辑网址")
+                    }
+                }
+            }
         },
         navigationIcon = {
-            IconButton(onClick = onBackClick) {
+            IconButton(onClick = if (addressEditing) onAddressCancel else onBackClick) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
         },
@@ -277,6 +374,20 @@ private fun ImportTopBar(
                         expanded = menuExpanded,
                         onDismissRequest = { onMenuExpandedChange(false) }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("手机版 UA${if (userAgentMode == ImportUserAgentMode.MOBILE) "（当前）" else ""}") },
+                            onClick = {
+                                onMenuExpandedChange(false)
+                                onUserAgentModeChange(ImportUserAgentMode.MOBILE)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("桌面版 UA${if (userAgentMode == ImportUserAgentMode.DESKTOP) "（当前）" else ""}") },
+                            onClick = {
+                                onMenuExpandedChange(false)
+                                onUserAgentModeChange(ImportUserAgentMode.DESKTOP)
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text("刷新页面") },
                             leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
@@ -293,7 +404,7 @@ private fun ImportTopBar(
 }
 
 /**
- * The WebView and its address bar, progress bar and import button.
+ * The WebView, compact address bar and floating controls.
  *
  * Split out of the screen so the page and the preparation step are two sibling branches rather than
  * one branch that has to bail out of a shared container.
@@ -302,25 +413,20 @@ private fun ImportTopBar(
 @Composable
 private fun ImportRunningContent(
     uiState: ImportWebUiState,
-    addressText: String,
-    onAddressTextChange: (String) -> Unit,
-    onAddressFocusChange: (Boolean) -> Unit,
-    onAddressSubmit: (String) -> Unit,
+    mobileUserAgent: String,
+    userAgentMode: ImportUserAgentMode,
     onRunScript: () -> Unit,
     webViewState: MutableState<WebView?>,
     pageHandle: ImportWebViewHandle,
     bridgeHost: SleepInBridgeHost,
     pageListener: ImportPageListener,
-    viewModel: ImportWebViewModel
+    viewModel: ImportWebViewModel,
+    showImportHelp: Boolean,
+    onImportHelpChange: (Boolean) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        if (uiState.startUrl == null) {
-            AddressBar(
-                value = addressText,
-                onValueChange = onAddressTextChange,
-                onSubmit = onAddressSubmit,
-                onFocusChanged = onAddressFocusChange
-            )
+        if (uiState.pageUrl.startsWith("http://", ignoreCase = true)) {
+            CleartextConnectionWarning()
         }
 
         uiState.progress?.let { progress ->
@@ -350,6 +456,7 @@ private fun ImportRunningContent(
                     val created = ImportWebViewFactory.create(
                         context = viewContext,
                         initialUrl = uiState.startUrl.orEmpty().ifBlank { BLANK_PAGE },
+                        userAgent = userAgentForMode(mobileUserAgent, userAgentMode),
                         host = bridgeHost,
                         listener = pageListener
                     )
@@ -365,9 +472,62 @@ private fun ImportRunningContent(
                     ImportWebViewFactory.destroy(released)
                 }
             )
-        }
 
-        ImportActionBar(uiState = uiState, onRunScript = onRunScript)
+            // Keep the browser controls over the page, not in a fixed-height bottom bar: portals often
+            // need every vertical pixel to show their timetable grid on a phone.
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+            ) {
+                SmallFloatingActionButton(onClick = { onImportHelpChange(true) }) {
+                    Icon(Icons.Outlined.Info, contentDescription = "导入帮助")
+                }
+                ExtendedFloatingActionButton(
+                    text = {
+                        Text(
+                            when {
+                                uiState.isCommitting -> "正在写入…"
+                                uiState.hasInjectedScript -> "重新导入"
+                                else -> "执行导入"
+                            }
+                        )
+                    },
+                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                    onClick = { if (uiState.canRunScript) onRunScript() },
+                    modifier = Modifier.semantics {
+                        if (!uiState.canRunScript) disabled()
+                    },
+                    containerColor = if (uiState.canRunScript) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    contentColor = if (uiState.canRunScript) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+        }
+    }
+
+    if (showImportHelp) {
+        AlertDialog(
+            onDismissRequest = { onImportHelpChange(false) },
+            title = { Text("导入提示") },
+            text = {
+                Text(
+                    "请先登录教务系统并打开课表页面，再点“执行导入”。页面显示或功能异常时，可在右上角“更多”中切换手机版 / 桌面版 UA。重新执行会先刷新当前页面。"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { onImportHelpChange(false) }) { Text("知道了") }
+            }
+        )
     }
 }
 
@@ -500,88 +660,22 @@ private fun ScheduleDropdown(
     }
 }
 
-/**
- * Address field for presets that do not name a start page.
- *
- * Always editable. An earlier version made it editable only after a tap, which cannot work: a
- * `readOnly` text field is not focusable, so clearing the flag at runtime does not give it focus and
- * the keyboard never appears. What the user is typing is protected from the page instead — the screen
- * stops syncing the field while it holds focus.
- */
+/** Warns before the user browses a page over HTTP. */
 @Composable
-private fun AddressBar(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onSubmit: (String) -> Unit,
-    onFocusChanged: (Boolean) -> Unit
-) {
-    val focusManager = LocalFocusManager.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val isFocused by interactionSource.collectIsFocusedAsState()
-
-    LaunchedEffect(isFocused) { onFocusChanged(isFocused) }
-
-    val submit = {
-        focusManager.clearFocus()
-        onSubmit(value)
-    }
-
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        placeholder = { Text("输入教务系统网址，例如 https://jwc.example.edu.cn") },
-        textStyle = MaterialTheme.typography.bodySmall,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-        keyboardActions = KeyboardActions(onGo = { submit() }),
-        trailingIcon = {
-            IconButton(onClick = submit) {
-                Icon(Icons.Filled.Search, contentDescription = "打开网址")
-            }
-        },
-        interactionSource = interactionSource,
+private fun CleartextConnectionWarning() {
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    )
-}
-
-/**
- * The import button and the one instruction that makes the flow work.
- */
-@Composable
-private fun ImportActionBar(
-    uiState: ImportWebUiState,
-    onRunScript: () -> Unit
-) {
-    HorizontalDivider()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = MaterialTheme.shapes.small
     ) {
         Text(
-            text = if (uiState.hasInjectedScript) {
-                "如果导入没有成功，可以再次点击；重新执行会先刷新当前页面。"
-            } else {
-                "请先登录教务系统并打开课表页面，再点击下面的按钮。"
-            },
-            style = MaterialTheme.typography.bodySmall
+            text = "不安全连接：当前页面使用 HTTP 明文传输，URL 中的登录认证 code 和请求内容可能被窃听或篡改。请确认这是学校官方域名；其他非 .edu.cn 的 HTTP 地址仍会被系统拦截。",
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(10.dp)
         )
-        Button(
-            onClick = onRunScript,
-            enabled = uiState.canRunScript,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                when {
-                    uiState.isCommitting -> "正在写入…"
-                    uiState.hasInjectedScript -> "重新执行导入"
-                    else -> "执行导入"
-                }
-            )
-        }
     }
 }
 

@@ -3,6 +3,7 @@ package com.kurosu.sleepin.data.importer
 import com.kurosu.sleepin.domain.model.importer.ImportPreset
 import com.kurosu.sleepin.domain.model.importer.ImportPresetGroup
 import com.kurosu.sleepin.domain.model.importer.ImportPresetSourceKind
+import com.kurosu.sleepin.domain.model.importer.customSchoolIdForName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -33,7 +34,10 @@ internal data class CustomImportPresetDto(
     val initial: String,
     val startUrl: String? = null,
     val description: String = "",
-    val maintainer: String = ""
+    val maintainer: String = "",
+    val schoolId: String? = null,
+    val schoolName: String? = null,
+    val schoolCode: String? = null
 )
 
 /**
@@ -133,7 +137,13 @@ internal fun CustomImportPresetDto.toImportPresetOrNull(): ImportPreset? {
         scriptSha256 = null,
         description = description.trim(),
         maintainer = maintainer.trim(),
-        source = ImportPresetSourceKind.CUSTOM
+        source = ImportPresetSourceKind.CUSTOM,
+        // Older stored entries used the school name as the preset name. Treat that as the school when
+        // reading them so users keep their saved scripts and they appear in the new hierarchy.
+        schoolId = schoolId?.trim()?.takeIf { it.isNotEmpty() }
+            ?: customSchoolIdForName(schoolName?.trim()?.takeUnless { it.isEmpty() } ?: resolvedName),
+        schoolName = schoolName?.trim()?.takeUnless { it.isEmpty() } ?: resolvedName,
+        schoolCode = schoolCode?.trim()?.takeUnless { it.isEmpty() }
     )
 }
 

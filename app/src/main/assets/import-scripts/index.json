@@ -1,16 +1,1 @@
-{
-  "schemaVersion": 1,
-  "indexVersion": 1,
-  "presets": [
-    {
-      "id": "generic-blank",
-      "name": "演示导入（无需教务系统）",
-      "group": "GENERAL",
-      "initial": "Y",
-      "startUrl": "",
-      "script": "presets/generic-blank/blank.js",
-      "description": "用固定示例数据走完整个导入流程，用于在没有适配脚本时确认导入功能是否正常。不需要登录、不会访问任何网站；其中一门示例课程故意使用第 13 节，用来检查“作息表缺节次”时的提示。",
-      "maintainer": "SleepIn"
-    }
-  ]
-}
+{"schemaVersion":1,"indexVersion":1,"schools":[],"presets":[]}

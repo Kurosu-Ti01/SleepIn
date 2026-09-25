@@ -108,6 +108,38 @@ sealed interface ImportWebEvent {
 }
 
 /**
+ * What the import page should be showing.
+ *
+ * A function of the state rather than a condition written inline in the screen, because the case that
+ * matters is easy to get wrong and produces a blank page rather than an error: a WebView is created once,
+ * so it must not exist until the preset has been read. Creating it earlier gives it whatever the state
+ * said at that moment — for a preset with a start URL, an empty document that never becomes the portal.
+ */
+enum class ImportWebStage {
+    /** The preset is still being read; nothing about the page can be decided yet. */
+    Loading,
+
+    /** The user still has to confirm which schedule the result should use. */
+    Preparation,
+
+    /** The preset is usable, so the page it points at can be opened. */
+    Running
+}
+
+/**
+ * Decides what the import page shows.
+ *
+ * [ImportWebUiState.scriptUnavailable] sends the user back to preparation rather than to a WebView: a
+ * preset whose script cannot be read has nothing to run, and opening its page would only offer a button
+ * that refuses to do anything.
+ */
+internal fun ImportWebUiState.stage(): ImportWebStage = when {
+    isLoading -> ImportWebStage.Loading
+    isStarted && !scriptUnavailable -> ImportWebStage.Running
+    else -> ImportWebStage.Preparation
+}
+
+/**
  * How the user answered a dialog.
  *
  * Cancelling resolves differently per request — an alert resolves `false`, a prompt or a choice

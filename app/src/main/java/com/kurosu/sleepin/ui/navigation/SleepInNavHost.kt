@@ -13,6 +13,10 @@ import com.kurosu.sleepin.SleepInApplication
 import com.kurosu.sleepin.domain.model.AppSettings
 import com.kurosu.sleepin.ui.screen.home.HomeScreen
 import com.kurosu.sleepin.ui.screen.home.HomeViewModel
+import com.kurosu.sleepin.ui.screen.importer.ImportPresetEditorScreen
+import com.kurosu.sleepin.ui.screen.importer.ImportPresetEditorViewModel
+import com.kurosu.sleepin.ui.screen.importer.ImportPresetListScreen
+import com.kurosu.sleepin.ui.screen.importer.ImportPresetListViewModel
 import com.kurosu.sleepin.ui.screen.importer.web.ImportWebScreen
 import com.kurosu.sleepin.ui.screen.importer.web.ImportWebViewModel
 import com.kurosu.sleepin.ui.screen.course.CourseEditorScreen
@@ -182,10 +186,7 @@ fun SleepInNavHost(
                 // from the same screen as CSV import and carries the schedule the form already picked.
                 onImportFromPortal = { scheduleId ->
                     navController.navigate(
-                        Screen.ImportWeb.createRoute(
-                            presetId = BUNDLED_DEMO_PRESET_ID,
-                            scheduleId = scheduleId
-                        )
+                        Screen.ImportPresetList.createRoute(scheduleId = scheduleId)
                     )
                 },
                 viewModel = vm
@@ -234,6 +235,92 @@ fun SleepInNavHost(
             )
             ScheduleEditorScreen(
                 onBackClick = { navController.popBackStack() },
+                viewModel = vm
+            )
+        }
+
+        composable(
+            route = Screen.ImportPresetList.route,
+            arguments = listOf(
+                navArgument(Screen.ImportPresetList.ARG_TIMETABLE_ID) {
+                    type = NavType.LongType
+                    defaultValue = Screen.ImportWeb.CREATE_TIMETABLE
+                },
+                navArgument(Screen.ImportPresetList.ARG_SCHEDULE_ID) {
+                    type = NavType.LongType
+                    defaultValue = Screen.ImportWeb.NO_SCHEDULE
+                }
+            )
+        ) { backStackEntry ->
+            val timetableRaw = backStackEntry.arguments
+                ?.getLong(Screen.ImportPresetList.ARG_TIMETABLE_ID)
+                ?: Screen.ImportWeb.CREATE_TIMETABLE
+            val scheduleRaw = backStackEntry.arguments
+                ?.getLong(Screen.ImportPresetList.ARG_SCHEDULE_ID)
+                ?: Screen.ImportWeb.NO_SCHEDULE
+
+            val vm: ImportPresetListViewModel = viewModel(
+                factory = ImportPresetListViewModel.factory(
+                    getImportPresetsUseCase = app.getImportPresetsUseCase,
+                    removeCustomImportPresetUseCase = app.removeCustomImportPresetUseCase
+                )
+            )
+            ImportPresetListScreen(
+                onBackClick = { navController.popBackStack() },
+                onPresetClick = { presetId ->
+                    navController.navigate(
+                        Screen.ImportWeb.createRoute(
+                            presetId = presetId,
+                            timetableId = timetableRaw,
+                            scheduleId = scheduleRaw
+                        )
+                    )
+                },
+                onCreateClick = { navController.navigate(Screen.ImportPresetEditor.createRoute()) },
+                onEditClick = { presetId ->
+                    navController.navigate(Screen.ImportPresetEditor.createRoute(presetId))
+                },
+                viewModel = vm
+            )
+        }
+
+        composable(
+            route = Screen.ImportPresetEditor.route,
+            arguments = listOf(
+                navArgument(Screen.ImportPresetEditor.ARG_PRESET_ID) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val presetId = backStackEntry.arguments
+                ?.getString(Screen.ImportPresetEditor.ARG_PRESET_ID)
+                .orEmpty()
+                .takeIf { it.isNotEmpty() }
+
+            val vm: ImportPresetEditorViewModel = viewModel(
+                key = "import_preset_editor_${presetId.orEmpty()}",
+                factory = ImportPresetEditorViewModel.factory(
+                    presetId = presetId,
+                    getImportPresetsUseCase = app.getImportPresetsUseCase,
+                    readImportScriptUseCase = app.readImportScriptUseCase,
+                    addCustomImportPresetUseCase = app.addCustomImportPresetUseCase,
+                    updateCustomImportPresetUseCase = app.updateCustomImportPresetUseCase
+                )
+            )
+            ImportPresetEditorScreen(
+                onBackClick = { navController.popBackStack() },
+                onSaved = { savedPresetId, runNow ->
+                    if (runNow) {
+                        // The editor is replaced rather than pushed onto, so going back from the import
+                        // page lands on the list instead of on a form the user has already finished with.
+                        navController.navigate(Screen.ImportWeb.createRoute(presetId = savedPresetId)) {
+                            popUpTo(Screen.ImportPresetEditor.route) { inclusive = true }
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
+                },
                 viewModel = vm
             )
         }
@@ -301,17 +388,11 @@ fun SleepInNavHost(
             )
             SettingsScreen(
                 onBackClick = { navController.popBackStack() },
+                onNavigateToImportPresets = {
+                    navController.navigate(Screen.ImportPresetList.createRoute())
+                },
                 viewModel = vm
             )
         }
     }
 }
-
-/**
- * Preset the new-timetable screen opens.
- *
- * Temporary plumbing: once the preset list exists, that screen navigates there instead and this
- * constant disappears. It names the demo preset bundled in the APK, which needs no portal account and
- * no network, so the whole flow — WebView, bridge, confirmation, write — can be exercised locally.
- */
-private const val BUNDLED_DEMO_PRESET_ID = "generic-blank"

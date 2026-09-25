@@ -2,6 +2,7 @@ package com.kurosu.sleepin.data.importer
 
 import com.kurosu.sleepin.domain.model.importer.ImportPresetGroup
 import com.kurosu.sleepin.domain.model.importer.ImportPresetSourceKind
+import com.kurosu.sleepin.domain.model.importer.customSchoolIdForName
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -21,12 +22,15 @@ class CustomImportPresetCodecTest {
         val stored = listOf(
             CustomImportPresetDto(
                 id = "custom-abc",
-                name = "示例大学",
+                name = "Sample campus",
                 group = ImportPresetGroup.UNDERGRADUATE.name,
                 initial = "S",
-                startUrl = "https://jw.example.edu.cn",
-                description = "先登录再打开课表页",
-                maintainer = "someone"
+                startUrl = "https://portal.example.invalid",
+                description = "Follow the portal instructions.",
+                maintainer = "someone",
+                schoolId = "school-sample",
+                schoolName = "Sample campus",
+                schoolCode = "SAMPLE-001"
             )
         )
 
@@ -61,25 +65,35 @@ class CustomImportPresetCodecTest {
     fun toImportPreset_mapsAStoredEntry() {
         val preset = CustomImportPresetDto(
             id = "custom-abc",
-            name = "  示例大学  ",
+            name = "  Sample campus  ",
             group = ImportPresetGroup.POSTGRADUATE.name,
             initial = "s",
-            startUrl = " https://jw.example.edu.cn ",
-            description = " 说明 ",
-            maintainer = " 某人 "
+            startUrl = " https://portal.example.invalid ",
+            description = " Description ",
+            maintainer = " Someone "
         ).toImportPresetOrNull()
 
         assertEquals("custom-abc", preset?.id)
-        assertEquals("示例大学", preset?.name)
+        assertEquals("Sample campus", preset?.name)
         assertEquals(ImportPresetGroup.POSTGRADUATE, preset?.group)
         assertEquals("S", preset?.initial)
-        assertEquals("https://jw.example.edu.cn", preset?.startUrl)
-        assertEquals("说明", preset?.description)
-        assertEquals("某人", preset?.maintainer)
+        assertEquals("https://portal.example.invalid", preset?.startUrl)
+        assertEquals("Description", preset?.description)
+        assertEquals("Someone", preset?.maintainer)
         assertEquals(ImportPresetSourceKind.CUSTOM, preset?.source)
+        assertEquals(customSchoolIdForName("Sample campus"), preset?.schoolId)
+        assertEquals("Sample campus", preset?.schoolName)
         // The path is derived, never stored: the id is the only thing that decides where the script is.
         assertEquals("presets/custom-abc/script.js", preset?.scriptPath)
         assertNull(preset?.scriptSha256)
+    }
+
+    @Test
+    fun toImportPreset_migratesLegacyPresetNameToSchoolName() {
+        val preset = storedDto(name = "Sample campus undergraduate preset").toImportPresetOrNull()
+
+        assertEquals("Sample campus undergraduate preset", preset?.schoolName)
+        assertEquals(customSchoolIdForName("Sample campus undergraduate preset"), preset?.schoolId)
     }
 
     @Test
@@ -134,10 +148,10 @@ class CustomImportPresetCodecTest {
 
     private fun storedDto(
         id: String = "custom-abc",
-        name: String = "示例大学",
+        name: String = "Sample campus",
         group: String = ImportPresetGroup.UNDERGRADUATE.name,
         initial: String = "S",
-        startUrl: String? = "https://jw.example.edu.cn"
+        startUrl: String? = "https://portal.example.invalid"
     ) = CustomImportPresetDto(
         id = id,
         name = name,

@@ -23,7 +23,13 @@ data class CustomImportPresetDraft(
     val startUrl: String,
     val description: String,
     val maintainer: String,
-    val scriptText: String
+    val scriptText: String,
+    /** Stable identifier selected from a known school, or null for a newly entered school. */
+    val schoolId: String? = null,
+    /** Display name of the school that owns this script. */
+    val schoolName: String = "",
+    /** Optional official identifier, used for search and display rather than as the internal key. */
+    val schoolCode: String = ""
 )
 
 /**

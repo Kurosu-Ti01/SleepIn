@@ -109,6 +109,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
+    onNavigateToImportPresets: () -> Unit,
     viewModel: SettingsViewModel
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -414,6 +415,14 @@ fun SettingsScreen(
                         Text("导出备份")
                     }
                 }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Language,
+                    title = "导入方案",
+                    valueText = "管理自己的脚本",
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    onClick = onNavigateToImportPresets
+                )
             }
 
             SettingsSectionCard(title = "更新") {

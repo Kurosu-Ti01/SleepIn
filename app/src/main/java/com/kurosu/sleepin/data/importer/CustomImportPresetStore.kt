@@ -7,6 +7,7 @@ import com.kurosu.sleepin.domain.model.importer.CustomImportPresetDraft
 import com.kurosu.sleepin.domain.model.importer.ImportPreset
 import com.kurosu.sleepin.domain.model.importer.ImportPresetAddResult
 import com.kurosu.sleepin.domain.model.importer.ImportPresetSourceKind
+import com.kurosu.sleepin.domain.model.importer.customSchoolIdForName
 import java.io.IOException
 import kotlinx.coroutines.flow.first
 
@@ -62,7 +63,11 @@ class CustomImportPresetStore(
             initial = draft.initial.trim().uppercase(),
             startUrl = draft.startUrl.trim(),
             description = draft.description.trim(),
-            maintainer = draft.maintainer.trim()
+            maintainer = draft.maintainer.trim(),
+            schoolId = draft.schoolId?.trim()?.takeIf { it.isNotEmpty() }
+                ?: customSchoolIdForName(draft.schoolName),
+            schoolName = draft.schoolName.trim(),
+            schoolCode = draft.schoolCode.trim().takeIf { it.isNotEmpty() }
         )
         if (!writeMetadata(existing + dto)) {
             // The script is already on disk; leaving it would waste space and could confuse a later

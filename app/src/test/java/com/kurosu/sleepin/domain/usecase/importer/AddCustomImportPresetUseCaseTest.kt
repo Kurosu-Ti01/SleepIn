@@ -35,6 +35,14 @@ class AddCustomImportPresetUseCaseTest {
     }
 
     @Test
+    fun invoke_rejectsABlankSchoolName() = runBlocking {
+        val result = useCase(draft(schoolName = "  "))
+
+        assertEquals("请选择或填写学校名称。", rejectionMessage(result))
+        assertNull(repository.addedDraft)
+    }
+
+    @Test
     fun invoke_rejectsABlankName() = runBlocking {
         val result = useCase(draft(name = "   "))
 
@@ -77,7 +85,7 @@ class AddCustomImportPresetUseCaseTest {
     fun invoke_rejectsAStartUrlWithoutAScheme() = runBlocking {
         // The scheme decides whether the portal is reached securely, so defaulting it silently would
         // hide a mistake in what the user pasted.
-        val result = useCase(draft(startUrl = "jw.example.edu.cn"))
+        val result = useCase(draft(startUrl = "portal.example.invalid"))
 
         assertTrue(rejectionMessage(result)!!.contains("http://"))
         assertNull(repository.addedDraft)
@@ -117,10 +125,11 @@ class AddCustomImportPresetUseCaseTest {
         name: String = "示例大学",
         group: ImportPresetGroup = ImportPresetGroup.UNDERGRADUATE,
         initial: String = "S",
-        startUrl: String = "https://jw.example.edu.cn",
+        startUrl: String = "https://portal.example.invalid",
         description: String = "先登录再打开课表页",
         maintainer: String = "someone",
-        scriptText: String = "console.log('import')"
+        scriptText: String = "console.log('import')",
+        schoolName: String = "示例大学"
     ) = CustomImportPresetDraft(
         name = name,
         group = group,
@@ -128,7 +137,8 @@ class AddCustomImportPresetUseCaseTest {
         startUrl = startUrl,
         description = description,
         maintainer = maintainer,
-        scriptText = scriptText
+        scriptText = scriptText,
+        schoolName = schoolName
     )
 }
 
@@ -164,7 +174,7 @@ internal class RecordingImportPresetRepository : ImportPresetRepository {
             name = "示例大学",
             group = ImportPresetGroup.UNDERGRADUATE,
             initial = "S",
-            startUrl = "https://jw.example.edu.cn",
+            startUrl = "https://portal.example.invalid",
             scriptPath = "presets/custom-abc/script.js",
             scriptSha256 = null,
             description = "",
