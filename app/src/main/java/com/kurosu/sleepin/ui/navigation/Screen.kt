@@ -41,48 +41,39 @@ sealed class Screen(val route: String) {
     /**
      * Runs an import script inside a WebView.
      *
-     * `timetableId` of -1 means the import creates a new timetable; the payload decides its name. The
-     * schedule is part of the route because linking the result to a class-time template is a decision
-     * the user makes before the script runs, and the app never writes schedule periods itself.
+     * The schedule is part of the route because linking the result to a class-time template is a
+     * decision the user makes before the script runs, and the app never writes schedule periods
+     * itself. Whether the import creates a timetable or replaces an existing one is *not* on the route:
+     * it is the first thing the import page asks, so there is one place that decides it.
      */
-    data object ImportWeb : Screen(
-        "import_web/{presetId}?timetableId={timetableId}&scheduleId={scheduleId}"
-    ) {
+    data object ImportWeb : Screen("import_web/{presetId}?scheduleId={scheduleId}") {
         const val ARG_PRESET_ID = "presetId"
-        const val ARG_TIMETABLE_ID = "timetableId"
         const val ARG_SCHEDULE_ID = "scheduleId"
         const val BASE_ROUTE = "import_web"
-
-        /** Sentinel for "create a new timetable", because Navigation Long args are not nullable. */
-        const val CREATE_TIMETABLE = -1L
 
         /** Sentinel for "no schedule chosen yet"; the screen asks for one before starting. */
         const val NO_SCHEDULE = -1L
 
         fun createRoute(
             presetId: String,
-            timetableId: Long = CREATE_TIMETABLE,
             scheduleId: Long = NO_SCHEDULE
-        ): String = "$BASE_ROUTE/$presetId?$ARG_TIMETABLE_ID=$timetableId&$ARG_SCHEDULE_ID=$scheduleId"
+        ): String = "$BASE_ROUTE/$presetId?$ARG_SCHEDULE_ID=$scheduleId"
     }
 
     /**
      * Picks the preset to import with, and is also where the user manages the ones they added.
      *
-     * The target and the schedule are carried only to be forwarded to [ImportWeb]: the entry points that
-     * already have a target supply them, and the entry that does not leaves them at their defaults.
+     * The schedule is carried only to be forwarded to [ImportWeb]: entry points that already have one
+     * supply it, and the entry that does not leaves it at its default.
      */
     data object ImportPresetList : Screen(
-        "import_preset_list?timetableId={timetableId}&scheduleId={scheduleId}"
+        "import_preset_list?scheduleId={scheduleId}"
     ) {
-        const val ARG_TIMETABLE_ID = "timetableId"
         const val ARG_SCHEDULE_ID = "scheduleId"
         const val BASE_ROUTE = "import_preset_list"
 
-        fun createRoute(
-            timetableId: Long = ImportWeb.CREATE_TIMETABLE,
-            scheduleId: Long = ImportWeb.NO_SCHEDULE
-        ): String = "$BASE_ROUTE?$ARG_TIMETABLE_ID=$timetableId&$ARG_SCHEDULE_ID=$scheduleId"
+        fun createRoute(scheduleId: Long = ImportWeb.NO_SCHEDULE): String =
+            "$BASE_ROUTE?$ARG_SCHEDULE_ID=$scheduleId"
     }
 
     /** Creates or changes one of the user's own presets. No id means create. */

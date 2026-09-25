@@ -3,15 +3,20 @@ package com.kurosu.sleepin.ui.screen.importer.web
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kurosu.sleepin.domain.model.formatPeriodNumbers
 import com.kurosu.sleepin.domain.repository.TimetableImportResult
+import com.kurosu.sleepin.domain.usecase.importer.BuildImportPreviewUseCase
 import com.kurosu.sleepin.domain.usecase.importer.CommitImportUseCase
 import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ImportParseResult
+import com.kurosu.sleepin.domain.usecase.importer.ImportPreview
+import com.kurosu.sleepin.domain.usecase.importer.ImportPreviewResult
 import com.kurosu.sleepin.domain.usecase.importer.ImportSubmission
 import com.kurosu.sleepin.domain.usecase.importer.ImportTarget
 import com.kurosu.sleepin.domain.usecase.importer.ParseImportSubmissionUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ReadImportScriptUseCase
 import com.kurosu.sleepin.domain.usecase.schedule.GetSchedulesUseCase
+import com.kurosu.sleepin.domain.usecase.timetable.GetTimetablesUseCase
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -37,19 +42,48 @@ data class ImportScheduleOptionUi(
 )
 
 /**
+ * One existing timetable the import may overwrite.
+ *
+ * Defined here for the same reason as [ImportScheduleOptionUi]: the screen needs an id and a label,
+ * and sharing the timetable list's model would couple two screens that otherwise do not know about
+ * each other.
+ */
+data class ImportTimetableOptionUi(
+    val id: Long,
+    val name: String,
+    /**
+     * Schedule the timetable currently uses.
+     *
+     * Carried so that choosing this target can default to the class times it already has, instead of
+     * whatever schedule happens to be first in the list. Replacing a timetable's courses is not a
+     * request to change when its classes happen.
+     */
+    val scheduleId: Long
+)
+
+/**
  * A payload that is valid and is waiting for the user to confirm it.
  *
  * The submission is kept in the state rather than written immediately so the confirmation dialog can
- * describe exactly what will be stored, and so cancelling really is a no-op.
- *
- * [targetLabel] and [scheduleLabel] are resolved when the request arrives because that is the last
- * moment the user's choices are known to be the ones the write will use.
+ * describe exactly what will be stored, and so cancelling really is a no-op. The description itself
+ * comes from [preview], which was resolved by the same rules the write will follow.
  */
 data class ImportPendingCommit(
     val callId: String,
     val submission: ImportSubmission,
-    val targetLabel: String,
-    val scheduleLabel: String
+    val preview: ImportPreview
+)
+
+/**
+ * Result shown as a dialog once the write succeeded.
+ *
+ * A dialog rather than a snackbar because this screen closes on success, which would take a snackbar
+ * with it. [scheduleIdToFix] is carried so the user can go straight to the schedule that is missing the
+ * imported periods, instead of having to find it in the schedule list afterwards.
+ */
+data class ImportSuccessNotice(
+    val message: String,
+    val scheduleIdToFix: Long?
 )
 
 /**
@@ -65,6 +99,10 @@ data class ImportWebUiState(
     val scriptUnavailable: Boolean = false,
     val scheduleOptions: List<ImportScheduleOptionUi> = emptyList(),
     val selectedScheduleId: Long? = null,
+    /** Timetables this import may overwrite. Empty means the user can only create a new one. */
+    val timetableOptions: List<ImportTimetableOptionUi> = emptyList(),
+    /** Target timetable chosen by the user; null means "create a new timetable". */
+    val selectedTimetableId: Long? = null,
     /** Whether the user has confirmed the schedule and the WebView may be shown. */
     val isStarted: Boolean = false,
     val pageTitle: String = "",
@@ -87,7 +125,7 @@ data class ImportWebUiState(
     val dialog: ImportWebRequest.Dialog? = null,
     val pendingCommit: ImportPendingCommit? = null,
     /** Shown as a dialog because the page closes on success, which would take a snackbar with it. */
-    val successNotice: String? = null,
+    val successNotice: ImportSuccessNotice? = null,
     val message: String? = null
 ) {
     /** Whether the import button should do something. */
@@ -103,8 +141,14 @@ data class ImportWebUiState(
  * One-shot effects of the import page.
  */
 sealed interface ImportWebEvent {
-    /** Leave the import page. [message] is shown by the caller, which outlives this screen. */
-    data class Finished(val message: String?) : ImportWebEvent
+    /**
+     * Leave the import page. [message] is shown by the caller, which outlives this screen.
+     *
+     * [openScheduleId] asks the caller to open that schedule's editor after leaving, which is how the
+     * "fix my schedule" answer to a period mismatch continues past this screen: the import is already
+     * stored, and the only remaining task is outside it.
+     */
+    data class Finished(val message: String?, val openScheduleId: Long? = null) : ImportWebEvent
 }
 
 /**
@@ -162,12 +206,13 @@ sealed interface ImportDialogAnswer {
  */
 class ImportWebViewModel(
     private val presetId: String,
-    private val timetableId: Long?,
     initialScheduleId: Long?,
     private val getImportPresetsUseCase: GetImportPresetsUseCase,
     private val readImportScriptUseCase: ReadImportScriptUseCase,
     private val getSchedulesUseCase: GetSchedulesUseCase,
+    private val getTimetablesUseCase: GetTimetablesUseCase,
     private val parseImportSubmissionUseCase: ParseImportSubmissionUseCase,
+    private val buildImportPreviewUseCase: BuildImportPreviewUseCase,
     private val commitImportUseCase: CommitImportUseCase
 ) : ViewModel() {
 
@@ -179,7 +224,8 @@ class ImportWebViewModel(
             selectedScheduleId = chosenScheduleId,
             // A caller that already knows the schedule — the new-timetable screen does, because picking
             // one is part of filling in that form — goes straight to the page instead of being asked
-            // again.
+            // again. The target is not decided here: choosing between creating a timetable and
+            // overwriting one belongs to the page itself.
             isStarted = chosenScheduleId != null
         )
     )
@@ -205,6 +251,7 @@ class ImportWebViewModel(
 
     init {
         observeSchedules()
+        observeTimetables()
         loadPreset()
     }
 
@@ -222,27 +269,65 @@ class ImportWebViewModel(
         _uiState.update { it.copy(message = null) }
     }
 
-    /** Acknowledges the success notice and leaves the page. */
-    fun consumeSuccessNotice() {
+    /** Acknowledges the success notice and leaves the page, optionally opening a schedule to fix. */
+    fun consumeSuccessNotice(openScheduleId: Long? = null) {
         val notice = _uiState.value.successNotice ?: return
         _uiState.update { it.copy(successNotice = null) }
-        viewModelScope.launch { _events.emit(ImportWebEvent.Finished(notice)) }
+        viewModelScope.launch { _events.emit(ImportWebEvent.Finished(notice.message, openScheduleId)) }
     }
 
     fun onScheduleChange(scheduleId: Long) {
         _uiState.update { it.copy(selectedScheduleId = scheduleId) }
     }
 
+    /** Chooses "create a new timetable" as the import target. */
+    fun onCreateTargetSelected() {
+        _uiState.update { it.copy(selectedTimetableId = null) }
+    }
+
+    /**
+     * Switches the target to "overwrite an existing timetable".
+     *
+     * Keeps whichever timetable was chosen before and falls back to the first one only when there is no
+     * usable choice left, so toggling the target back and forth does not silently move the selection.
+     * The schedule follows the timetable, because overwriting one is not a request to change when its
+     * classes happen; the user can still pick a different schedule afterwards.
+     */
+    fun onOverwriteTargetRequested() {
+        _uiState.update { state ->
+            val option = chooseOverwriteTarget(state.timetableOptions, state.selectedTimetableId)
+                ?: return@update state
+            state.copy(selectedTimetableId = option.id, selectedScheduleId = option.scheduleId)
+        }
+    }
+
+    /** Chooses an existing timetable the import should replace the courses of. */
+    fun onOverwriteTargetSelected(timetableId: Long) {
+        _uiState.update { state ->
+            val option = state.timetableOptions.firstOrNull { it.id == timetableId }
+                ?: return@update state
+            state.copy(selectedTimetableId = option.id, selectedScheduleId = option.scheduleId)
+        }
+    }
+
     /**
      * Leaves the preparation step and shows the WebView.
      *
-     * The schedule is required up front because the import writes a reference to it and an academic
-     * portal reports period numbers without class times; the app will not invent them.
+     * Both the target and the schedule are required up front because the write needs them: the
+     * schedule because an academic portal reports period numbers without class times and the app will
+     * not invent them, the target because an import replaces every course of the timetable it writes
+     * to.
      */
     fun onStartImport() {
         val state = _uiState.value
         if (state.selectedScheduleId == null) {
             emitMessage("请先选择作息表。")
+            return
+        }
+        if (state.selectedTimetableId != null &&
+            state.timetableOptions.none { option -> option.id == state.selectedTimetableId }
+        ) {
+            emitMessage("要覆盖的课程表不存在，可能已被删除。")
             return
         }
         if (state.scriptUnavailable) {
@@ -404,23 +489,26 @@ class ImportWebViewModel(
     /** Writes the confirmed payload. */
     fun confirmCommit() {
         val pending = _uiState.value.pendingCommit ?: return
-        val scheduleId = _uiState.value.selectedScheduleId
-        if (scheduleId == null) {
-            _uiState.update { it.copy(pendingCommit = null) }
-            failCommit(pending, "请先选择作息表。")
-            return
-        }
+        // Cleared before the coroutine starts, so a second tap in the same frame cannot start a second
+        // write for the same confirmation.
+        _uiState.update { it.copy(pendingCommit = null, isCommitting = true) }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(pendingCommit = null, isCommitting = true) }
-            val target = timetableId
-                ?.let { id -> ImportTarget.ExistingTimetable(id) }
-                ?: ImportTarget.NewTimetable
+            val preview = pending.preview
 
-            when (val result = commitImportUseCase(pending.submission, target, scheduleId)) {
+            when (
+                val result = commitImportUseCase(
+                    submission = pending.submission,
+                    target = preview.target,
+                    scheduleId = preview.scheduleId
+                )
+            ) {
                 is TimetableImportResult.Imported -> {
                     _uiState.update {
-                        it.copy(isCommitting = false, successNotice = importSummary(result))
+                        it.copy(
+                            isCommitting = false,
+                            successNotice = buildSuccessNotice(result, preview)
+                        )
                     }
                     resolveTrue(pending.callId)
                 }
@@ -490,10 +578,13 @@ class ImportWebViewModel(
     }
 
     /**
-     * Validates a payload and asks the user to confirm it.
+     * Validates a payload, describes the resulting import and asks the user to confirm it.
      *
      * Rejecting here — rather than showing a dialog for an empty or unusable payload — means the script
      * gets a precise message it can display, which is the only feedback channel a preset author has.
+     * The summary is built by [BuildImportPreviewUseCase] from the same resolved target and schedule the
+     * write will use, so a target that was deleted while the user was logged in is refused now instead
+     * of after they confirm.
      */
     private fun onCommitRequested(request: ImportWebRequest.Commit) {
         val state = _uiState.value
@@ -504,34 +595,52 @@ class ImportWebViewModel(
         _uiState.update { it.copy(isPreparingCommit = true) }
 
         viewModelScope.launch {
-            when (val parsed = parseImportSubmissionUseCase(request.payloadJson)) {
+            val submission = when (val parsed = parseImportSubmissionUseCase(request.payloadJson)) {
                 is ImportParseResult.Rejected -> {
+                    // Not announced to the user: the script is still running and reports this itself.
                     _uiState.update { it.copy(isPreparingCommit = false) }
                     reject(request.callId, parsed.message)
+                    return@launch
                 }
 
-                is ImportParseResult.Accepted -> {
-                    if (parsed.submission.courses.isEmpty()) {
-                        _uiState.update { it.copy(isPreparingCommit = false) }
-                        reject(request.callId, "导入数据里没有任何课程，已取消导入。")
-                        return@launch
-                    }
-                    val current = _uiState.value
-                    _uiState.update {
-                        it.copy(
-                            isPreparingCommit = false,
-                            pendingCommit = ImportPendingCommit(
-                                callId = request.callId,
-                                submission = parsed.submission,
-                                targetLabel = if (timetableId == null) "新建课程表" else "覆盖现有课程表",
-                                scheduleLabel = current.scheduleOptions
-                                    .firstOrNull { option -> option.id == current.selectedScheduleId }
-                                    ?.name
-                                    .orEmpty()
-                            )
+                is ImportParseResult.Accepted -> parsed.submission
+            }
+            if (submission.courses.isEmpty()) {
+                _uiState.update { it.copy(isPreparingCommit = false) }
+                reject(request.callId, "导入数据里没有任何课程，已取消导入。")
+                return@launch
+            }
+
+            val current = _uiState.value
+            val scheduleId = current.selectedScheduleId
+            if (scheduleId == null) {
+                failPrepare(request.callId, "请先选择作息表。")
+                return@launch
+            }
+
+            val target = current.selectedTimetableId
+                ?.let { id -> ImportTarget.ExistingTimetable(id) }
+                ?: ImportTarget.NewTimetable
+
+            when (val preview = buildImportPreviewUseCase(submission, target, scheduleId)) {
+                is ImportPreviewResult.Ready -> _uiState.update {
+                    it.copy(
+                        isPreparingCommit = false,
+                        pendingCommit = ImportPendingCommit(
+                            callId = request.callId,
+                            submission = submission,
+                            preview = preview.preview
                         )
-                    }
+                    )
                 }
+
+                ImportPreviewResult.ScheduleNotFound ->
+                    failPrepare(request.callId, "所选作息表不存在，请重新选择作息表后再导入。")
+
+                ImportPreviewResult.TimetableNotFound ->
+                    failPrepare(request.callId, "目标课程表不存在，可能已被删除。")
+
+                is ImportPreviewResult.Rejected -> failPrepare(request.callId, preview.message)
             }
         }
     }
@@ -542,13 +651,47 @@ class ImportWebViewModel(
         emitMessage(message)
     }
 
-    private fun importSummary(result: TimetableImportResult.Imported): String = buildString {
-        append("已导入 ")
-        append(result.courseCount)
-        append(" 门课程、")
-        append(result.sessionCount)
-        append(" 条课时。")
-        if (timetableId == null) append("新课表已设为当前课表。")
+    /**
+     * Refuses a payload before the user is asked to confirm it.
+     *
+     * Reported both to the script and to the user: unlike a malformed payload, which the script is
+     * expected to explain, this happens to a payload that was acceptable when the script built it.
+     */
+    private fun failPrepare(callId: String, message: String) {
+        _uiState.update { it.copy(isPreparingCommit = false) }
+        reject(callId, message)
+        emitMessage(message)
+    }
+
+    /**
+     * Builds the success dialog's text and, when the payload outran the schedule, the way to fix it.
+     *
+     * The import has already happened at this point, so the only useful thing left to offer is the
+     * schedule editor: the courses exist, they simply have no class time until the missing periods are
+     * filled in.
+     */
+    private fun buildSuccessNotice(
+        result: TimetableImportResult.Imported,
+        preview: ImportPreview
+    ): ImportSuccessNotice {
+        val missingPeriods = preview.diagnostics.periodsMissingFromSchedule
+        val message = buildString {
+            append("已导入 ")
+            append(result.courseCount)
+            append(" 门课程、")
+            append(result.sessionCount)
+            append(" 条课时。")
+            if (preview.target is ImportTarget.NewTimetable) append("新课表已设为当前课表。")
+            if (missingPeriods.isNotEmpty()) {
+                append("\n\n第 ")
+                append(formatPeriodNumbers(missingPeriods))
+                append(" 节未在所选作息表中定义，这些课时暂时没有上课时间。")
+            }
+        }
+        return ImportSuccessNotice(
+            message = message,
+            scheduleIdToFix = preview.scheduleId.takeIf { preview.diagnostics.hasScheduleMismatch }
+        )
     }
 
     private fun loadPreset() {
@@ -599,6 +742,34 @@ class ImportWebViewModel(
         }
     }
 
+    /**
+     * Streams the timetables an import could overwrite.
+     *
+     * A chosen target that disappears clears the choice instead of being kept, so the confirmation
+     * cannot promise to overwrite something the user can no longer see; falling back to "new timetable"
+     * is the safe direction, because that writes nothing over an existing one.
+     */
+    private fun observeTimetables() {
+        viewModelScope.launch {
+            getTimetablesUseCase().collect { timetables ->
+                _uiState.update { state ->
+                    val options = timetables.map { timetable ->
+                        ImportTimetableOptionUi(
+                            id = timetable.id,
+                            name = timetable.name,
+                            scheduleId = timetable.scheduleId
+                        )
+                    }
+                    state.copy(
+                        timetableOptions = options,
+                        selectedTimetableId = state.selectedTimetableId
+                            ?.takeIf { id -> options.any { option -> option.id == id } }
+                    )
+                }
+            }
+        }
+    }
+
     private fun resolve(callId: String, literal: String? = null) {
         pageHandle?.evaluate(SleepInBridgeProtocol.buildResolveScript(callId, ok = true, literal))
     }
@@ -632,12 +803,13 @@ class ImportWebViewModel(
         /** Manual factory mirrors the current non-Hilt architecture used across the app. */
         fun factory(
             presetId: String,
-            timetableId: Long?,
             scheduleId: Long?,
             getImportPresetsUseCase: GetImportPresetsUseCase,
             readImportScriptUseCase: ReadImportScriptUseCase,
             getSchedulesUseCase: GetSchedulesUseCase,
+            getTimetablesUseCase: GetTimetablesUseCase,
             parseImportSubmissionUseCase: ParseImportSubmissionUseCase,
+            buildImportPreviewUseCase: BuildImportPreviewUseCase,
             commitImportUseCase: CommitImportUseCase
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
@@ -645,12 +817,13 @@ class ImportWebViewModel(
                     @Suppress("UNCHECKED_CAST")
                     return ImportWebViewModel(
                         presetId = presetId,
-                        timetableId = timetableId,
                         initialScheduleId = scheduleId,
                         getImportPresetsUseCase = getImportPresetsUseCase,
                         readImportScriptUseCase = readImportScriptUseCase,
                         getSchedulesUseCase = getSchedulesUseCase,
+                        getTimetablesUseCase = getTimetablesUseCase,
                         parseImportSubmissionUseCase = parseImportSubmissionUseCase,
+                        buildImportPreviewUseCase = buildImportPreviewUseCase,
                         commitImportUseCase = commitImportUseCase
                     ) as T
                 }
