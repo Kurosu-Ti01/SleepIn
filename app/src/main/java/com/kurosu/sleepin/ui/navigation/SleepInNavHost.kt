@@ -242,19 +242,12 @@ fun SleepInNavHost(
         composable(
             route = Screen.ImportPresetList.route,
             arguments = listOf(
-                navArgument(Screen.ImportPresetList.ARG_TIMETABLE_ID) {
-                    type = NavType.LongType
-                    defaultValue = Screen.ImportWeb.CREATE_TIMETABLE
-                },
                 navArgument(Screen.ImportPresetList.ARG_SCHEDULE_ID) {
                     type = NavType.LongType
                     defaultValue = Screen.ImportWeb.NO_SCHEDULE
                 }
             )
         ) { backStackEntry ->
-            val timetableRaw = backStackEntry.arguments
-                ?.getLong(Screen.ImportPresetList.ARG_TIMETABLE_ID)
-                ?: Screen.ImportWeb.CREATE_TIMETABLE
             val scheduleRaw = backStackEntry.arguments
                 ?.getLong(Screen.ImportPresetList.ARG_SCHEDULE_ID)
                 ?: Screen.ImportWeb.NO_SCHEDULE
@@ -271,7 +264,6 @@ fun SleepInNavHost(
                     navController.navigate(
                         Screen.ImportWeb.createRoute(
                             presetId = presetId,
-                            timetableId = timetableRaw,
                             scheduleId = scheduleRaw
                         )
                     )
@@ -331,10 +323,6 @@ fun SleepInNavHost(
                 navArgument(Screen.ImportWeb.ARG_PRESET_ID) {
                     type = NavType.StringType
                 },
-                navArgument(Screen.ImportWeb.ARG_TIMETABLE_ID) {
-                    type = NavType.LongType
-                    defaultValue = Screen.ImportWeb.CREATE_TIMETABLE
-                },
                 navArgument(Screen.ImportWeb.ARG_SCHEDULE_ID) {
                     type = NavType.LongType
                     defaultValue = Screen.ImportWeb.NO_SCHEDULE
@@ -344,9 +332,6 @@ fun SleepInNavHost(
             val presetId = backStackEntry.arguments
                 ?.getString(Screen.ImportWeb.ARG_PRESET_ID)
                 .orEmpty()
-            val timetableRaw = backStackEntry.arguments
-                ?.getLong(Screen.ImportWeb.ARG_TIMETABLE_ID)
-                ?: Screen.ImportWeb.CREATE_TIMETABLE
             val scheduleRaw = backStackEntry.arguments
                 ?.getLong(Screen.ImportWeb.ARG_SCHEDULE_ID)
                 ?: Screen.ImportWeb.NO_SCHEDULE
@@ -355,21 +340,29 @@ fun SleepInNavHost(
                 key = "import_web_$presetId",
                 factory = ImportWebViewModel.factory(
                     presetId = presetId,
-                    timetableId = timetableRaw.takeIf { it > 0L },
                     scheduleId = scheduleRaw.takeIf { it > 0L },
                     getImportPresetsUseCase = app.getImportPresetsUseCase,
                     readImportScriptUseCase = app.readImportScriptUseCase,
                     getSchedulesUseCase = app.getSchedulesUseCase,
+                    getTimetablesUseCase = app.getTimetablesUseCase,
                     parseImportSubmissionUseCase = app.parseImportSubmissionUseCase,
+                    buildImportPreviewUseCase = app.buildImportPreviewUseCase,
                     commitImportUseCase = app.commitImportUseCase
                 )
             )
             ImportWebScreen(
                 onBackClick = { navController.popBackStack() },
                 // The result is a timetable that has just been made current, so land on Home rather
-                // than unwinding to wherever the import was started from.
-                onFinished = {
-                    navController.popBackStack(Screen.Home.route, inclusive = false)
+                // than unwinding to wherever the import was started from. A period mismatch instead
+                // continues into the schedule editor, which is the one task the import left undone.
+                onFinished = { scheduleIdToFix ->
+                    if (scheduleIdToFix == null) {
+                        navController.popBackStack(Screen.Home.route, inclusive = false)
+                    } else {
+                        navController.navigate(Screen.ScheduleEditor.createRoute(scheduleIdToFix)) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                        }
+                    }
                 },
                 onOpenScheduleList = { navController.navigate(Screen.ScheduleList.route) },
                 viewModel = vm

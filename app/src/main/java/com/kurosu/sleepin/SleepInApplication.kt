@@ -32,6 +32,7 @@ import com.kurosu.sleepin.domain.usecase.timetable.UpdateTimetableUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.importer.AddCustomImportPresetUseCase
+import com.kurosu.sleepin.domain.usecase.importer.BuildImportPreviewUseCase
 import com.kurosu.sleepin.domain.usecase.importer.CommitImportUseCase
 import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ParseImportSubmissionUseCase
@@ -125,6 +126,8 @@ class SleepInApplication : Application() {
         private set
 
     lateinit var parseImportSubmissionUseCase: ParseImportSubmissionUseCase
+        private set
+    lateinit var buildImportPreviewUseCase: BuildImportPreviewUseCase
         private set
     lateinit var commitImportUseCase: CommitImportUseCase
         private set
@@ -225,6 +228,12 @@ class SleepInApplication : Application() {
 
         // Academic-portal import: parse a script payload, then persist it in one transaction.
         parseImportSubmissionUseCase = ParseImportSubmissionUseCase(importPayloadParser)
+        // The preview and the write resolve their target through the same resolver, so the summary the
+        // user confirms is the import that gets stored.
+        buildImportPreviewUseCase = BuildImportPreviewUseCase(
+            getTimetableDetailUseCase = getTimetableDetailUseCase,
+            getScheduleDetailUseCase = getScheduleDetailUseCase
+        )
         commitImportUseCase = CommitImportUseCase(
             timetableImportRepository = timetableImportRepository,
             getTimetableDetailUseCase = getTimetableDetailUseCase

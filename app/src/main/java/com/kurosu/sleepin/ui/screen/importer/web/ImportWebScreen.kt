@@ -10,6 +10,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SmallFloatingActionButton
@@ -66,6 +69,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -74,6 +78,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kurosu.sleepin.domain.model.formatPeriodNumbers
+import com.kurosu.sleepin.domain.usecase.importer.ImportPreview
 
 /**
  * The WebView an import script runs in, plus the controls around it.
@@ -86,7 +92,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun ImportWebScreen(
     onBackClick: () -> Unit,
-    onFinished: () -> Unit,
+    /**
+     * Leaves the page. A non-null id asks the caller to open that schedule's editor next, which is how
+     * the "fix my schedule" answer to a period mismatch survives this screen being popped.
+     */
+    onFinished: (openScheduleId: Long?) -> Unit,
     onOpenScheduleList: () -> Unit,
     viewModel: ImportWebViewModel
 ) {
@@ -102,6 +112,7 @@ fun ImportWebScreen(
     val addressInteractionSource = remember { MutableInteractionSource() }
     val isAddressFocused by addressInteractionSource.collectIsFocusedAsState()
     var scheduleExpanded by remember { mutableStateOf(false) }
+    var timetableExpanded by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
     var showImportHelp by remember { mutableStateOf(false) }
     var userAgentMode by remember { mutableStateOf(ImportUserAgentMode.MOBILE) }
@@ -153,7 +164,7 @@ fun ImportWebScreen(
                     event.message?.let { message ->
                         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                     }
-                    onFinished()
+                    onFinished(event.openScheduleId)
                 }
             }
         }
@@ -196,7 +207,7 @@ fun ImportWebScreen(
         AlertDialog(
             onDismissRequest = viewModel::dismissCommit,
             title = { Text("确认导入") },
-            text = { Text(buildCommitPreview(pending)) },
+            text = { Text(buildCommitPreview(pending.preview)) },
             confirmButton = {
                 TextButton(onClick = viewModel::confirmCommit) { Text("确认导入") }
             },
@@ -207,12 +218,24 @@ fun ImportWebScreen(
     }
 
     uiState.successNotice?.let { notice ->
+        val scheduleIdToFix = notice.scheduleIdToFix
         AlertDialog(
-            onDismissRequest = viewModel::consumeSuccessNotice,
+            onDismissRequest = { viewModel.consumeSuccessNotice() },
             title = { Text("导入完成") },
-            text = { Text(notice) },
+            text = { Text(notice.message) },
             confirmButton = {
-                TextButton(onClick = viewModel::consumeSuccessNotice) { Text("完成") }
+                TextButton(onClick = { viewModel.consumeSuccessNotice() }) { Text("完成") }
+            },
+            // Offered only when the payload used periods the schedule does not define, because that
+            // is the one leftover task the import cannot do itself.
+            dismissButton = if (scheduleIdToFix == null) {
+                null
+            } else {
+                {
+                    TextButton(onClick = { viewModel.consumeSuccessNotice(scheduleIdToFix) }) {
+                        Text("去修改作息表")
+                    }
+                }
             }
         )
     }
@@ -284,11 +307,16 @@ fun ImportWebScreen(
                 // Preparation also covers "still loading" and "the script could not be read"; it shows a
                 // spinner in the first case and the reason in the second.
                 ImportWebStage.Loading,
-                ImportWebStage.Preparation -> ImportPreparationContent(
+                ImportWebStage.Preparation -> ImportSetupContent(
                     uiState = uiState,
                     scheduleExpanded = scheduleExpanded,
                     onScheduleExpandedChange = { expanded -> scheduleExpanded = expanded },
                     onScheduleChange = viewModel::onScheduleChange,
+                    timetableExpanded = timetableExpanded,
+                    onTimetableExpandedChange = { expanded -> timetableExpanded = expanded },
+                    onCreateTargetSelected = viewModel::onCreateTargetSelected,
+                    onOverwriteTargetRequested = viewModel::onOverwriteTargetRequested,
+                    onOverwriteTargetSelected = viewModel::onOverwriteTargetSelected,
                     onOpenScheduleList = onOpenScheduleList,
                     onStart = viewModel::onStartImport
                 )
@@ -343,7 +371,7 @@ private fun ImportTopBar(
                         .fillMaxWidth()
                         .clickable(enabled = uiState.isStarted, onClick = onAddressEditClick),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = uiState.pageTitle.ifBlank {
@@ -480,7 +508,7 @@ private fun ImportRunningContent(
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 SmallFloatingActionButton(onClick = { onImportHelpChange(true) }) {
                     Icon(Icons.Outlined.Info, contentDescription = "导入帮助")
@@ -532,18 +560,23 @@ private fun ImportRunningContent(
 }
 
 /**
- * The step before the WebView: confirm which schedule the imported timetable will use.
+ * The step before the WebView: choose what the import writes to and what class times it uses.
  *
- * Kept inside this screen rather than on a page of its own because it is the last thing the user
- * decides before the page appears, and it is the same schedule the write will reference.
+ * Kept inside this screen rather than on a page of its own because these are the last two decisions
+ * the user makes before the page appears, and they are the same two the write will use.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ImportPreparationContent(
+private fun ImportSetupContent(
     uiState: ImportWebUiState,
     scheduleExpanded: Boolean,
     onScheduleExpandedChange: (Boolean) -> Unit,
     onScheduleChange: (Long) -> Unit,
+    timetableExpanded: Boolean,
+    onTimetableExpandedChange: (Boolean) -> Unit,
+    onCreateTargetSelected: () -> Unit,
+    onOverwriteTargetRequested: () -> Unit,
+    onOverwriteTargetSelected: (Long) -> Unit,
     onOpenScheduleList: () -> Unit,
     onStart: () -> Unit
 ) {
@@ -551,59 +584,189 @@ private fun ImportPreparationContent(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
-    } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(20.dp)
-        ) {
-            if (uiState.presetName.isNotBlank()) {
-                Text(text = uiState.presetName, style = MaterialTheme.typography.titleMedium)
-            }
-            if (uiState.presetDescription.isNotBlank()) {
-                Text(
-                    text = uiState.presetDescription,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
+    ) {
+        if (uiState.presetName.isNotBlank()) {
+            Text(text = uiState.presetName, style = MaterialTheme.typography.titleMedium)
+        }
+        if (uiState.presetDescription.isNotBlank()) {
+            Text(
+                text = uiState.presetDescription,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(text = "导入到", style = MaterialTheme.typography.labelLarge)
+        TargetOptionRow(
+            label = "新建课程表",
+            selected = uiState.selectedTimetableId == null,
+            enabled = true,
+            onClick = onCreateTargetSelected
+        )
+        TargetOptionRow(
+            label = "覆盖已有课程表",
+            selected = uiState.selectedTimetableId != null,
+            // Nothing to overwrite yet, and offering it would only produce an empty picker.
+            enabled = uiState.timetableOptions.isNotEmpty(),
+            onClick = onOverwriteTargetRequested
+        )
+
+        if (uiState.selectedTimetableId != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            TimetableDropdown(
+                uiState = uiState,
+                expanded = timetableExpanded,
+                onExpandedChange = onTimetableExpandedChange,
+                onTimetableChange = onOverwriteTargetSelected
+            )
+            // Said plainly because the import is a full replacement, not a merge.
+            Text(
+                text = "覆盖会清空该课程表已有的全部课程，再写入本次导入的课程。",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        } else if (uiState.timetableOptions.isEmpty()) {
+            Text(
+                text = "当前没有可覆盖的课程表，本次导入会新建一个。",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        if (uiState.scheduleOptions.isEmpty()) {
+            Text(
+                text = "还没有作息表。导入不会修改作息表，而课程表需要关联一个作息表才能显示上课时间。",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(onClick = onOpenScheduleList) { Text("去创建作息表") }
+        } else {
+            ScheduleDropdown(
+                uiState = uiState,
+                expanded = scheduleExpanded,
+                onExpandedChange = onScheduleExpandedChange,
+                onScheduleChange = onScheduleChange
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            if (uiState.scheduleOptions.isEmpty()) {
-                Text(
-                    text = "还没有作息表。导入不会修改作息表，而课程表需要关联一个作息表才能显示上课时间。",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            Button(
+                onClick = onStart,
+                enabled = !uiState.scriptUnavailable,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("开始导入")
+            }
+
+            if (uiState.scriptUnavailable) {
                 Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(onClick = onOpenScheduleList) { Text("去创建作息表") }
-            } else {
-                ScheduleDropdown(
-                    uiState = uiState,
-                    expanded = scheduleExpanded,
-                    onExpandedChange = onScheduleExpandedChange,
-                    onScheduleChange = onScheduleChange
+                Text(
+                    text = "该方案的脚本无法读取，请返回重新选择方案。",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
                 )
+            }
+        }
+    }
+}
 
-                Spacer(modifier = Modifier.height(24.dp))
+/**
+ * One choice of where the import writes.
+ *
+ * The row is the click target and the radio button is inert, so one tap cannot be counted twice — the
+ * same arrangement the script's own choice dialog uses.
+ */
+@Composable
+private fun TargetOptionRow(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.RadioButton,
+                onClick = onClick
+            )
+            .padding(vertical = 4.dp)
+    ) {
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Text(
+            text = label,
+            modifier = Modifier.padding(start = 8.dp),
+            color = if (enabled) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+    }
+}
 
-                Button(
-                    onClick = onStart,
-                    enabled = !uiState.scriptUnavailable,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("开始导入")
-                }
+/**
+ * Picker for the timetable an import should replace the courses of.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimetableDropdown(
+    uiState: ImportWebUiState,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onTimetableChange: (Long) -> Unit
+) {
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = onExpandedChange
+    ) {
+        val selectedName = uiState.timetableOptions
+            .firstOrNull { option -> option.id == uiState.selectedTimetableId }
+            ?.name
+            .orEmpty()
 
-                if (uiState.scriptUnavailable) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "该方案的脚本无法读取，请返回重新选择方案。",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
+        OutlinedTextField(
+            modifier = Modifier
+                .menuAnchor(type = MenuAnchorType.PrimaryNotEditable, enabled = true)
+                .fillMaxWidth()
+                .clickable { onExpandedChange(true) },
+            value = selectedName,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("要覆盖的课程表") },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            }
+        )
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) }
+        ) {
+            uiState.timetableOptions.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.name) },
+                    onClick = {
+                        onTimetableChange(option.id)
+                        onExpandedChange(false)
+                    }
+                )
             }
         }
     }
@@ -684,29 +847,103 @@ private fun CleartextConnectionWarning() {
  *
  * Deliberately describes what will be replaced as well as what will be added: the user is about to
  * change stored data on the word of a script they did not write, and this is their only chance to see
- * it first.
+ * it first. Everything comes from the diagnostics the write itself will use, so nothing here can
+ * disagree with the result.
+ *
+ * The mismatch notes are warnings, not refusals. The sessions they describe are stored either way —
+ * dropping them would lose classes the portal really reports — so the only honest thing to do is say
+ * what will not be visible yet and why.
  */
-private fun buildCommitPreview(pending: ImportPendingCommit): String = buildString {
-    append("目标：")
-    append(pending.targetLabel)
-    append('\n')
-    val name = pending.submission.timetable?.name
-    if (!name.isNullOrBlank()) {
+private fun buildCommitPreview(preview: ImportPreview): String {
+    val diagnostics = preview.diagnostics
+    return buildString {
+        append("目标：")
+        append(preview.targetLabel)
+        append('\n')
         append("名称：")
-        append(name)
+        append(preview.timetableName)
         append('\n')
-    }
-    if (pending.scheduleLabel.isNotBlank()) {
         append("作息表：")
-        append(pending.scheduleLabel)
+        append(preview.scheduleLabel)
         append('\n')
+
+        append("周数：")
+        val weekRange = diagnostics.weekRange
+        if (weekRange == null) {
+            append("无课时")
+        } else {
+            append("第 ")
+            append(weekRange.first)
+            append('-')
+            append(weekRange.last)
+            append(" 周")
+        }
+        append("（课程表共 ")
+        append(diagnostics.totalWeeks)
+        append(" 周）")
+        append('\n')
+
+        append("课程：")
+        append(diagnostics.courseCount)
+        append(" 门\n")
+        append("课时：")
+        append(diagnostics.sessionCount)
+        append(" 条")
+
+        if (diagnostics.periodsMissingFromSchedule.isNotEmpty()) {
+            append("\n\n第 ")
+            append(formatPeriodNumbers(diagnostics.periodsMissingFromSchedule))
+            append(" 节未在所选作息表中定义，导入后这些课时没有上课时间，需要你到作息表里补全。")
+        }
+        if (diagnostics.weeksOutsideSemester.isNotEmpty()) {
+            append("\n\n第 ")
+            append(formatPeriodNumbers(diagnostics.weeksOutsideSemester))
+            append(" 周超出课程表的 ")
+            append(diagnostics.totalWeeks)
+            append(" 周，这些周次的课时不会出现在周视图里。")
+        }
+
+        val overlaps = diagnostics.slotOverlaps
+        if (overlaps.isNotEmpty()) {
+            append("\n\n有 ")
+            append(overlaps.size)
+            append(" 组课时时间重叠：")
+            overlaps.take(MAX_LISTED_OVERLAPS).forEach { overlap ->
+                append("\n· ")
+                append(weekdayLabel(overlap.dayOfWeek))
+                append(' ')
+                append(
+                    if (overlap.startPeriod == overlap.endPeriod) {
+                        "第 ${overlap.startPeriod} 节"
+                    } else {
+                        "第 ${overlap.startPeriod}-${overlap.endPeriod} 节"
+                    }
+                )
+                append("（第 ")
+                append(formatPeriodNumbers(overlap.weeks))
+                append(" 周）：")
+                append(overlap.firstCourseName)
+                append(" / ")
+                append(overlap.secondCourseName)
+            }
+            if (overlaps.size > MAX_LISTED_OVERLAPS) {
+                append("\n· 其余 ")
+                append(overlaps.size - MAX_LISTED_OVERLAPS)
+                append(" 组未列出")
+            }
+        }
     }
-    append("课程：")
-    append(pending.submission.courses.size)
-    append(" 门\n")
-    append("课时：")
-    append(pending.submission.courses.sumOf { course -> course.sessions.size })
-    append(" 条")
+}
+
+/** Chinese weekday label for one of the ISO day numbers a session may use. */
+private fun weekdayLabel(dayOfWeek: Int): String = when (dayOfWeek.coerceIn(1, 7)) {
+    1 -> "周一"
+    2 -> "周二"
+    3 -> "周三"
+    4 -> "周四"
+    5 -> "周五"
+    6 -> "周六"
+    else -> "周日"
 }
 
 /**
@@ -723,3 +960,11 @@ private fun normalizeAddressInput(raw: String): String? {
 
 /** Blank page a preset without a start URL begins at. */
 private const val BLANK_PAGE = "about:blank"
+
+/**
+ * How many overlapping slot groups the confirmation lists individually.
+ *
+ * A payload that clashes this often is broken in a way the user has to fix where it came from, so the
+ * dialog reports the count of the rest instead of growing past the screen.
+ */
+private const val MAX_LISTED_OVERLAPS = 5
