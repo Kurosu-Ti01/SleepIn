@@ -47,12 +47,15 @@ object ImportWebViewFactory {
     /**
      * Creates a WebView for [initialUrl] with the bridge installed.
      *
+     * @param userAgent the identity to use on the initial request. The caller derives it from the
+     *   WebView's default value so switching profiles never has to guess a Chromium version.
      * @param host the object pages see as [SleepInBridgeProtocol.HOST_INTERFACE].
      */
     @SuppressLint("SetJavaScriptEnabled")
     fun create(
         context: Context,
         initialUrl: String,
+        userAgent: String,
         host: SleepInBridgeHost,
         listener: ImportPageListener
     ): WebView {
@@ -66,6 +69,7 @@ object ImportWebViewFactory {
 
         webView.settings.apply {
             javaScriptEnabled = true
+            userAgentString = userAgent
             // localStorage and sessionStorage, which portals use to keep a login across page loads.
             domStorageEnabled = true
             loadWithOverviewMode = true

@@ -37,6 +37,7 @@ import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ParseImportSubmissionUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ReadImportScriptUseCase
 import com.kurosu.sleepin.domain.usecase.importer.RemoveCustomImportPresetUseCase
+import com.kurosu.sleepin.domain.usecase.importer.UpdateCustomImportPresetUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
@@ -136,6 +137,8 @@ class SleepInApplication : Application() {
         private set
     lateinit var removeCustomImportPresetUseCase: RemoveCustomImportPresetUseCase
         private set
+    lateinit var updateCustomImportPresetUseCase: UpdateCustomImportPresetUseCase
+        private set
 
     private lateinit var seedDefaultScheduleUseCase: SeedDefaultScheduleUseCase
 
@@ -230,6 +233,7 @@ class SleepInApplication : Application() {
         readImportScriptUseCase = ReadImportScriptUseCase(importPresetRepository)
         addCustomImportPresetUseCase = AddCustomImportPresetUseCase(importPresetRepository)
         removeCustomImportPresetUseCase = RemoveCustomImportPresetUseCase(importPresetRepository)
+        updateCustomImportPresetUseCase = UpdateCustomImportPresetUseCase(importPresetRepository)
     }
 
     /**

@@ -65,4 +65,32 @@ sealed class Screen(val route: String) {
             scheduleId: Long = NO_SCHEDULE
         ): String = "$BASE_ROUTE/$presetId?$ARG_TIMETABLE_ID=$timetableId&$ARG_SCHEDULE_ID=$scheduleId"
     }
+
+    /**
+     * Picks the preset to import with, and is also where the user manages the ones they added.
+     *
+     * The target and the schedule are carried only to be forwarded to [ImportWeb]: the entry points that
+     * already have a target supply them, and the entry that does not leaves them at their defaults.
+     */
+    data object ImportPresetList : Screen(
+        "import_preset_list?timetableId={timetableId}&scheduleId={scheduleId}"
+    ) {
+        const val ARG_TIMETABLE_ID = "timetableId"
+        const val ARG_SCHEDULE_ID = "scheduleId"
+        const val BASE_ROUTE = "import_preset_list"
+
+        fun createRoute(
+            timetableId: Long = ImportWeb.CREATE_TIMETABLE,
+            scheduleId: Long = ImportWeb.NO_SCHEDULE
+        ): String = "$BASE_ROUTE?$ARG_TIMETABLE_ID=$timetableId&$ARG_SCHEDULE_ID=$scheduleId"
+    }
+
+    /** Creates or changes one of the user's own presets. No id means create. */
+    data object ImportPresetEditor : Screen("import_preset_editor?presetId={presetId}") {
+        const val ARG_PRESET_ID = "presetId"
+        const val BASE_ROUTE = "import_preset_editor"
+
+        fun createRoute(presetId: String? = null): String =
+            if (presetId == null) BASE_ROUTE else "$BASE_ROUTE?$ARG_PRESET_ID=$presetId"
+    }
 }

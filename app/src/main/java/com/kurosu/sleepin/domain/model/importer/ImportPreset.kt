@@ -20,10 +20,8 @@ enum class ImportPresetSourceKind {
 /**
  * Display grouping of a preset.
  *
- * Chinese universities commonly run separate academic systems for bachelor/associate and postgraduate
- * students, and some tools belong to neither, so the three groups mirror how users look for their
- * school. The set is fixed rather than data-driven: a fourth group would need its own UI treatment
- * anyway, so pretending the index can extend it would be misleading.
+ * Kept as variant metadata inside a school's script list; school identity and top-level grouping are
+ * represented separately by [ImportPreset.schoolId].
  */
 enum class ImportPresetGroup {
     /** Bachelor and associate degree programmes. */
@@ -32,7 +30,7 @@ enum class ImportPresetGroup {
     /** Postgraduate programmes. */
     POSTGRADUATE,
 
-    /** Tools and demo presets that belong to no single school. */
+    /** Tools that belong to no single school. */
     GENERAL
 }
 
@@ -67,7 +65,15 @@ data class ImportPreset(
     /** Shown in the preset list and on the import screen; carries any per-school usage hint. */
     val description: String,
     val maintainer: String,
-    val source: ImportPresetSourceKind
+    val source: ImportPresetSourceKind,
+    /** Stable school identity shared by all of its import scripts; null means a general tool. */
+    val schoolId: String? = null,
+    /** School display name, separate from [name], which names this particular script variant. */
+    val schoolName: String? = null,
+    /** Optional official school code; useful for search, but not used as the internal identity. */
+    val schoolCode: String? = null,
+    /** Other searchable names for the school. */
+    val schoolAliases: List<String> = emptyList()
 )
 
 /**
@@ -76,7 +82,8 @@ data class ImportPreset(
 data class ImportPresetIndex(
     val schemaVersion: Int,
     val indexVersion: Int,
-    val presets: List<ImportPreset>
+    val presets: List<ImportPreset>,
+    val schools: List<ImportPresetSchool> = emptyList()
 )
 
 /**

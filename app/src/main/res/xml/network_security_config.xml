@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Keep cleartext blocked by default for every host. -->
+    <base-config cleartextTrafficPermitted="false" />
+
+    <!-- Some university single-sign-on flows still return to HTTP. Scope the exception to the
+         education domain and its subdomains instead of allowing cleartext across the whole app. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">edu.cn</domain>
+    </domain-config>
+</network-security-config>
