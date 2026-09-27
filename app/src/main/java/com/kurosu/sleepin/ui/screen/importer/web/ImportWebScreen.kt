@@ -80,6 +80,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kurosu.sleepin.domain.model.formatPeriodNumbers
 import com.kurosu.sleepin.domain.usecase.importer.ImportPreview
+import com.kurosu.sleepin.domain.usecase.importer.ImportScheduleSource
 
 /**
  * The WebView an import script runs in, plus the controls around it.
@@ -204,12 +205,43 @@ fun ImportWebScreen(
     }
 
     uiState.pendingCommit?.let { pending ->
+        val preview = pending.preview
+        val busy = uiState.isPreparingCommit || uiState.isCommitting
         AlertDialog(
             onDismissRequest = viewModel::dismissCommit,
             title = { Text("确认导入") },
-            text = { Text(buildCommitPreview(pending.preview)) },
+            text = {
+                Column {
+                    // Only offered when the script actually read class times. Showing it otherwise
+                    // would mean offering a choice the app has to refuse, and the user would only
+                    // learn that after picking it.
+                    if (preview.importedPeriodCount > 0) {
+                        Text(text = "上课时间", style = MaterialTheme.typography.labelLarge)
+                        ChoiceRadioRow(
+                            label = "用方案提供的（新建作息表）",
+                            selected = preview.scheduleSource == ImportScheduleSource.FromPayload,
+                            enabled = !busy,
+                            onClick = { viewModel.onScheduleSourceSelected(ImportScheduleSource.FromPayload) }
+                        )
+                        ChoiceRadioRow(
+                            label = "用我现有的作息表",
+                            selected = preview.scheduleSource is ImportScheduleSource.Existing,
+                            enabled = !busy && uiState.selectedScheduleId != null,
+                            onClick = {
+                                uiState.selectedScheduleId?.let { scheduleId ->
+                                    viewModel.onScheduleSourceSelected(ImportScheduleSource.Existing(scheduleId))
+                                }
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    Text(text = buildCommitPreview(preview))
+                }
+            },
             confirmButton = {
-                TextButton(onClick = viewModel::confirmCommit) { Text("确认导入") }
+                TextButton(onClick = viewModel::confirmCommit, enabled = !busy) {
+                    Text("确认导入")
+                }
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissCommit) { Text("取消") }
@@ -607,13 +639,13 @@ private fun ImportSetupContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(text = "导入到", style = MaterialTheme.typography.labelLarge)
-        TargetOptionRow(
+        ChoiceRadioRow(
             label = "新建课程表",
             selected = uiState.selectedTimetableId == null,
             enabled = true,
             onClick = onCreateTargetSelected
         )
-        TargetOptionRow(
+        ChoiceRadioRow(
             label = "覆盖已有课程表",
             selected = uiState.selectedTimetableId != null,
             // Nothing to overwrite yet, and offering it would only produce an empty picker.
@@ -684,13 +716,13 @@ private fun ImportSetupContent(
 }
 
 /**
- * One choice of where the import writes.
+ * One choice in a short radio group (import target, source of class times).
  *
  * The row is the click target and the radio button is inert, so one tap cannot be counted twice — the
  * same arrangement the script's own choice dialog uses.
  */
 @Composable
-private fun TargetOptionRow(
+private fun ChoiceRadioRow(
     label: String,
     selected: Boolean,
     enabled: Boolean,

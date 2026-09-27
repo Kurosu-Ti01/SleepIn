@@ -12,6 +12,7 @@ import com.kurosu.sleepin.data.importer.ImportPayloadParser
 import com.kurosu.sleepin.data.importer.ImportPresetFileStore
 import com.kurosu.sleepin.data.importer.ImportPresetIndexParser
 import com.kurosu.sleepin.data.importer.MutableImportPresetSource
+import com.kurosu.sleepin.data.importer.debugImportPresetSources
 import com.kurosu.sleepin.data.preferences.ImportPresetPreferenceStore
 import com.kurosu.sleepin.data.preferences.SettingsPreferenceStore
 import com.kurosu.sleepin.data.repository.CourseRepositoryImpl
@@ -63,6 +64,9 @@ object RepositoryModule {
      *
      * The bundled source comes first and the user's own presets after it, so a preset the user added
      * replaces a bundled one with the same id. A downloaded index joins the list in the same way.
+     *
+     * Debug builds add a sample source between them ([debugImportPresetSources]); release builds add
+     * nothing, because the sample and its script live in the debug source set only.
      */
     fun provideImportPresetRepository(
         assets: AssetManager,
@@ -71,10 +75,9 @@ object RepositoryModule {
     ): ImportPresetRepository = ImportPresetRepositoryImpl(
         // The user's own presets take part in the merge and are also the only writable source, so they
         // appear in both roles.
-        sources = listOf(
-            BundledImportPresetSource(assets = assets, parser = parser),
-            customPresets
-        ),
+        sources = listOf(BundledImportPresetSource(assets = assets, parser = parser)) +
+            debugImportPresetSources() +
+            listOf(customPresets),
         customPresets = customPresets
     )
 
@@ -89,6 +92,8 @@ object RepositoryModule {
             database = database,
             timetableDao = DatabaseModule.provideTimetableDao(database),
             scheduleDao = DatabaseModule.provideScheduleDao(database),
+            // Also used to create the schedule template an import may carry from a portal.
+            schedulePeriodDao = DatabaseModule.provideSchedulePeriodDao(database),
             courseDao = DatabaseModule.provideCourseDao(database),
             courseSessionDao = DatabaseModule.provideCourseSessionDao(database)
         )

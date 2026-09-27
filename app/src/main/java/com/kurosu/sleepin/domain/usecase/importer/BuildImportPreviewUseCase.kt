@@ -16,9 +16,24 @@ data class ImportPreview(
     val targetLabel: String,
     /** Name the target timetable will have after the import. */
     val timetableName: String,
-    /** Schedule the resulting timetable will reference. */
+    /** Where the class times come from; carried so the write uses what the user confirmed. */
+    val scheduleSource: ImportScheduleSource,
+    /**
+     * Schedule the result will reference, or 0 when the import creates one.
+     *
+     * Zero means "not decided yet": the template is written together with the courses, and the real
+     * id comes back in the write result.
+     */
     val scheduleId: Long,
+    /** User-facing description of where the class times come from. */
     val scheduleLabel: String,
+    /**
+     * How many class times the payload reported.
+     *
+     * Zero means this portal only reports period numbers, and the confirmation step then offers no
+     * choice at all rather than an option that would have to be refused.
+     */
+    val importedPeriodCount: Int,
     val totalWeeks: Int,
     val diagnostics: ImportDiagnostics
 )
@@ -65,28 +80,43 @@ class BuildImportPreviewUseCase(
     suspend operator fun invoke(
         submission: ImportSubmission,
         target: ImportTarget,
-        scheduleId: Long
+        scheduleSource: ImportScheduleSource
     ): ImportPreviewResult {
-        val resolved = when (val resolution = planResolver.resolve(submission, target, scheduleId)) {
+        val resolved = when (val resolution = planResolver.resolve(submission, target, scheduleSource)) {
             is ImportPlanResolution.Rejected -> return ImportPreviewResult.Rejected(resolution.message)
             ImportPlanResolution.TargetNotFound -> return ImportPreviewResult.TimetableNotFound
             is ImportPlanResolution.Resolved -> resolution
         }
 
-        val schedule = getScheduleDetailUseCase(resolved.scheduleId)
-            ?: return ImportPreviewResult.ScheduleNotFound
+        // Which periods count as "defined" depends on the source the user chose: the template that
+        // is about to be created, or the one already on the device. Getting this from the same
+        // resolved plan the write uses is what keeps the two dialogs from disagreeing.
+        val scheduleLabel: String
+        val definedPeriods: Set<Int>
+        val newSchedule = resolved.newSchedule
+        if (newSchedule != null) {
+            scheduleLabel = "新建作息表（$CREATED_SCHEDULE_LABEL_SUFFIX，${newSchedule.periods.size} 节）"
+            definedPeriods = newSchedule.periods.mapTo(mutableSetOf()) { period -> period.periodNumber }
+        } else {
+            val schedule = getScheduleDetailUseCase(resolved.scheduleId)
+                ?: return ImportPreviewResult.ScheduleNotFound
+            scheduleLabel = schedule.schedule.name
+            definedPeriods = schedule.periods.mapTo(mutableSetOf()) { period -> period.periodNumber }
+        }
 
         return ImportPreviewResult.Ready(
             ImportPreview(
                 target = target,
                 targetLabel = targetLabel(target, resolved.timetableName),
                 timetableName = resolved.timetableName,
+                scheduleSource = scheduleSource,
                 scheduleId = resolved.scheduleId,
-                scheduleLabel = schedule.schedule.name,
+                scheduleLabel = scheduleLabel,
+                importedPeriodCount = submission.periods.size,
                 totalWeeks = resolved.totalWeeks,
                 diagnostics = buildImportDiagnostics(
                     submission = submission,
-                    definedPeriods = schedule.periods.map { period -> period.periodNumber }.toSet(),
+                    definedPeriods = definedPeriods,
                     totalWeeks = resolved.totalWeeks
                 )
             )
@@ -96,5 +126,10 @@ class BuildImportPreviewUseCase(
     private fun targetLabel(target: ImportTarget, timetableName: String): String = when (target) {
         ImportTarget.NewTimetable -> "新建课程表"
         is ImportTarget.ExistingTimetable -> "覆盖「$timetableName」"
+    }
+
+    private companion object {
+        /** Wording for a template that will be created from the portal's own times. */
+        const val CREATED_SCHEDULE_LABEL_SUFFIX = "来自方案"
     }
 }

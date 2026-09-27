@@ -1,7 +1,20 @@
 package com.kurosu.sleepin.domain.repository
 
 import com.kurosu.sleepin.domain.model.CourseWithSessions
+import com.kurosu.sleepin.domain.model.SchedulePeriod
 import java.time.LocalDate
+
+/**
+ * A schedule template an import should create before linking its result to it.
+ *
+ * Only exists so that an import which read class times from a portal can store them as a real
+ * schedule. The periods carry no ids: the implementation assigns them, because the schedule row
+ * does not exist until the write runs.
+ */
+data class ImportScheduleDraft(
+    val name: String,
+    val periods: List<SchedulePeriod>
+)
 
 /**
  * Describes what one academic-portal import should do with its target timetable.
@@ -17,18 +30,22 @@ sealed interface TimetableImportPlan {
      * @param name display name for the new timetable; already validated as non-blank.
      * @param totalWeeks semester length; already validated against the range the app can display.
      * @param startDate first day of week 1.
-     * @param scheduleId existing schedule template the timetable should reference. The import never
-     *   writes schedule periods, because a class-time template is a deliberate user decision while
-     *   an academic portal often only knows period numbers.
+     * @param scheduleId existing schedule template the timetable should reference. The import writes
+     *   schedule periods only when [newSchedule] is given, because a class-time template is normally
+     *   a deliberate user decision while an academic portal often only knows period numbers.
      * @param setActive whether the new timetable should become the active one. Newly imported
      *   timetables normally become active so the user immediately sees the result.
+     * @param newSchedule class times the payload reported, when the user chose to build a schedule
+     *   from them. Non-null means the import creates that schedule and links the result to it, so
+     *   [scheduleId] is ignored.
      */
     data class CreateNew(
         val name: String,
         val totalWeeks: Int,
         val startDate: LocalDate,
         val scheduleId: Long,
-        val setActive: Boolean
+        val setActive: Boolean,
+        val newSchedule: ImportScheduleDraft? = null
     ) : TimetableImportPlan
 
     /**
@@ -39,10 +56,13 @@ sealed interface TimetableImportPlan {
      * @param scheduleId schedule template the timetable should point at after the import. It is
      *   applied even when it differs from the current one, because picking the schedule is part of
      *   the import setup the user just completed.
+     * @param newSchedule same meaning as in [CreateNew]: when present, the import creates this
+     *   schedule and re-points the timetable at it instead of using [scheduleId].
      */
     data class Overwrite(
         val timetableId: Long,
-        val scheduleId: Long
+        val scheduleId: Long,
+        val newSchedule: ImportScheduleDraft? = null
     ) : TimetableImportPlan
 }
 
@@ -58,7 +78,15 @@ sealed interface TimetableImportResult {
     data class Imported(
         val timetableId: Long,
         val courseCount: Int,
-        val sessionCount: Int
+        val sessionCount: Int,
+        /**
+         * Schedule template the result references *after* the write.
+         *
+         * Carried back because an import that created a schedule from the payload's own times knows
+         * that id only once the schedule row exists, and the "go fix your schedule" action has to
+         * point at the schedule the user actually ended up with.
+         */
+        val scheduleId: Long = 0L
     ) : TimetableImportResult
 
     /** [TimetableImportPlan.Overwrite] referenced a timetable that no longer exists. */
@@ -77,7 +105,8 @@ sealed interface TimetableImportResult {
  * This exists separately from [CourseRepository] because an import creates or selects a timetable
  * and then replaces all of its courses; splitting that across several repository calls would leave
  * a half-written timetable behind whenever one step failed. Implementations must therefore perform
- * the whole operation inside a single database transaction.
+ * the whole operation inside a single database transaction — including creating the schedule an
+ * import may carry, so a failure cannot leave an orphan template behind either.
  */
 interface TimetableImportRepository {
 

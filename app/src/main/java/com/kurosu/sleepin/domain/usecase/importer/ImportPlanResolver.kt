@@ -1,6 +1,8 @@
 package com.kurosu.sleepin.domain.usecase.importer
 
 import com.kurosu.sleepin.domain.model.MAX_SEMESTER_WEEK_COUNT
+import com.kurosu.sleepin.domain.model.SchedulePeriod
+import com.kurosu.sleepin.domain.repository.ImportScheduleDraft
 import com.kurosu.sleepin.domain.repository.TimetableImportPlan
 import com.kurosu.sleepin.domain.usecase.timetable.GetTimetableDetailUseCase
 import java.time.LocalDate
@@ -27,7 +29,15 @@ internal sealed interface ImportPlanResolution {
         val plan: TimetableImportPlan,
         val totalWeeks: Int,
         val timetableName: String,
-        val scheduleId: Long
+        val scheduleId: Long,
+        /**
+         * Non-null when the import creates a schedule template from the payload's own class times.
+         *
+         * [scheduleId] is then 0: the template does not exist yet, and both the confirmation step
+         * and the write have to describe the same thing, so the draft travels with the plan instead
+         * of being rebuilt from the payload a second time.
+         */
+        val newSchedule: ImportScheduleDraft? = null
     ) : ImportPlanResolution
 
     /** The timetable to overwrite does not exist (any more). */
@@ -50,27 +60,69 @@ internal class ImportPlanResolver(
 ) {
 
     /**
-     * Resolves [submission] for [target].
+     * Resolves [submission] for [target] and [scheduleSource].
      *
-     * @param scheduleId schedule the user chose. Required when creating a timetable; when overwriting,
-     *   a non-positive value means "keep the timetable's current schedule". The caller is expected to
-     *   have the user choose one, because an academic portal usually reports only period numbers and
-     *   the app refuses to invent class times.
+     * @param scheduleSource where the class times come from. An existing schedule must be named (or,
+     *   when overwriting, may be left at 0 to keep the timetable's current one);
+     *   [ImportScheduleSource.FromPayload] requires the payload to have reported times, because the
+     *   app does not invent them.
      */
     suspend fun resolve(
         submission: ImportSubmission,
         target: ImportTarget,
-        scheduleId: Long
-    ): ImportPlanResolution = when (target) {
-        ImportTarget.NewTimetable -> resolveCreatePlan(submission, scheduleId)
-        is ImportTarget.ExistingTimetable -> resolveOverwritePlan(target, scheduleId)
+        scheduleSource: ImportScheduleSource
+    ): ImportPlanResolution {
+        val schedule = when (val resolved = resolveSchedule(submission, scheduleSource)) {
+            is ScheduleResolution.Rejected -> return ImportPlanResolution.Rejected(resolved.message)
+            is ScheduleResolution.Resolved -> resolved
+        }
+        return when (target) {
+            ImportTarget.NewTimetable -> resolveCreatePlan(submission, schedule)
+            is ImportTarget.ExistingTimetable -> resolveOverwritePlan(target, schedule)
+        }
+    }
+
+    /**
+     * Decides which schedule the result will reference: an existing one, or one built from the
+     * payload's times.
+     */
+    private fun resolveSchedule(
+        submission: ImportSubmission,
+        scheduleSource: ImportScheduleSource
+    ): ScheduleResolution = when (scheduleSource) {
+        is ImportScheduleSource.Existing ->
+            ScheduleResolution.Resolved(scheduleId = scheduleSource.scheduleId, newSchedule = null)
+
+        ImportScheduleSource.FromPayload -> {
+            val periods = submission.periods
+            if (periods.isEmpty()) {
+                ScheduleResolution.Rejected("该方案没有提供作息时间，请选择一个已有作息表。")
+            } else {
+                ScheduleResolution.Resolved(
+                    scheduleId = 0L,
+                    newSchedule = ImportScheduleDraft(
+                        name = DEFAULT_SCHEDULE_NAME,
+                        // scheduleId is assigned by the repository while writing; the draft carries
+                        // times only.
+                        periods = periods.map { period ->
+                            SchedulePeriod(
+                                scheduleId = 0L,
+                                periodNumber = period.periodNumber,
+                                startTime = period.startTime,
+                                endTime = period.endTime
+                            )
+                        }
+                    )
+                )
+            }
+        }
     }
 
     private fun resolveCreatePlan(
         submission: ImportSubmission,
-        scheduleId: Long
+        schedule: ScheduleResolution.Resolved
     ): ImportPlanResolution {
-        if (scheduleId <= 0L) {
+        if (schedule.newSchedule == null && schedule.scheduleId <= 0L) {
             return ImportPlanResolution.Rejected("请先选择作息表，再执行导入。")
         }
 
@@ -90,36 +142,59 @@ internal class ImportPlanResolver(
                 name = name,
                 totalWeeks = totalWeeks,
                 startDate = payloadTimetable?.startDate ?: LocalDate.now(),
-                scheduleId = scheduleId,
+                scheduleId = schedule.scheduleId,
                 // An import is almost always the act of "setting up this semester", so the result
                 // should be what the user lands on.
-                setActive = true
+                setActive = true,
+                newSchedule = schedule.newSchedule
             ),
             totalWeeks = totalWeeks,
             timetableName = name,
-            scheduleId = scheduleId
+            scheduleId = schedule.scheduleId,
+            newSchedule = schedule.newSchedule
         )
     }
 
     private suspend fun resolveOverwritePlan(
         target: ImportTarget.ExistingTimetable,
-        scheduleId: Long
+        schedule: ScheduleResolution.Resolved
     ): ImportPlanResolution {
         val existing = getTimetableDetailUseCase(target.timetableId)
             ?: return ImportPlanResolution.TargetNotFound
 
         // Falling back to the current schedule keeps a caller that only intends to refresh courses
         // from silently unlinking the timetable's class times.
-        val resolvedScheduleId = scheduleId.takeIf { it > 0L } ?: existing.scheduleId
+        val resolvedScheduleId = when {
+            schedule.newSchedule != null -> 0L
+            schedule.scheduleId > 0L -> schedule.scheduleId
+            else -> existing.scheduleId
+        }
         return ImportPlanResolution.Resolved(
             plan = TimetableImportPlan.Overwrite(
                 timetableId = existing.id,
-                scheduleId = resolvedScheduleId
+                scheduleId = resolvedScheduleId,
+                newSchedule = schedule.newSchedule
             ),
             totalWeeks = existing.totalWeeks,
             timetableName = existing.name,
-            scheduleId = resolvedScheduleId
+            scheduleId = resolvedScheduleId,
+            newSchedule = schedule.newSchedule
         )
+    }
+
+    /**
+     * Outcome of deciding where the class times come from. Private because callers only ever see the
+     * result of the whole resolution.
+     */
+    private sealed interface ScheduleResolution {
+
+        /** @param scheduleId existing template id, or 0 when [newSchedule] will be created. */
+        data class Resolved(
+            val scheduleId: Long,
+            val newSchedule: ImportScheduleDraft?
+        ) : ScheduleResolution
+
+        data class Rejected(val message: String) : ScheduleResolution
     }
 
     internal companion object {
@@ -129,6 +204,14 @@ internal class ImportPlanResolver(
          * be wrong for a payload that describes a different term.
          */
         const val DEFAULT_TIMETABLE_NAME = "导入的课程表"
+
+        /**
+         * Name for a schedule template built from the times a portal reported.
+         *
+         * Says where it came from so the user can tell it apart from their own templates when they
+         * later edit or delete it.
+         */
+        const val DEFAULT_SCHEDULE_NAME = "导入的作息表"
 
         /**
          * Semester length used when the payload omits it. Matches the value the timetable editor
