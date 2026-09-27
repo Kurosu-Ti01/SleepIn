@@ -1,6 +1,7 @@
 package com.kurosu.sleepin.domain.usecase.importer
 
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * Payload shape produced by an academic-portal import script, as decoded from JSON.
@@ -13,7 +14,21 @@ import java.time.LocalDate
 data class ImportPayloadDraft(
     val schemaVersion: Int?,
     val timetable: ImportTimetableDraft?,
-    val courses: List<ImportCourseDraft>?
+    val courses: List<ImportCourseDraft>?,
+    val periods: List<ImportPeriodDraft>? = null
+)
+
+/**
+ * One class-time entry as sent by the script, as decoded from JSON.
+ *
+ * Times stay as text here because turning them into [java.time.LocalTime] is a validation decision:
+ * doing it in the decoder would report a bad value as a decoder failure instead of as a precise
+ * message naming the offending entry.
+ */
+data class ImportPeriodDraft(
+    val periodNumber: Int?,
+    val startTime: String?,
+    val endTime: String?
 )
 
 /**
@@ -78,7 +93,26 @@ sealed interface ImportPayloadDecodeResult {
  */
 data class ImportSubmission(
     val timetable: ImportedTimetable?,
-    val courses: List<ImportedCourse>
+    val courses: List<ImportedCourse>,
+    /**
+     * Class times the payload reported, sorted by period number; empty when it reported none.
+     *
+     * An import that carries these can build a schedule instead of asking the user to pick one. The
+     * user still decides: the confirmation step offers "use the times the script read" next to "use
+     * an existing schedule", and this list is what makes the first option possible.
+     */
+    val periods: List<ImportedSchedulePeriod> = emptyList()
+)
+
+/**
+ * Validated class time for one period number.
+ *
+ * Wall-clock only: a schedule template repeats every day, so there is no date to carry.
+ */
+data class ImportedSchedulePeriod(
+    val periodNumber: Int,
+    val startTime: LocalTime,
+    val endTime: LocalTime
 )
 
 /**

@@ -5,11 +5,14 @@ import com.kurosu.sleepin.data.local.SleepInDatabase
 import com.kurosu.sleepin.data.local.dao.CourseDao
 import com.kurosu.sleepin.data.local.dao.CourseSessionDao
 import com.kurosu.sleepin.data.local.dao.ScheduleDao
+import com.kurosu.sleepin.data.local.dao.SchedulePeriodDao
 import com.kurosu.sleepin.data.local.dao.TimetableDao
+import com.kurosu.sleepin.data.local.entity.ScheduleEntity
 import com.kurosu.sleepin.data.local.entity.TimetableEntity
 import com.kurosu.sleepin.data.local.mapper.toEntity
 import com.kurosu.sleepin.domain.model.CourseWithSessions
 import com.kurosu.sleepin.domain.repository.CourseRepository
+import com.kurosu.sleepin.domain.repository.ImportScheduleDraft
 import com.kurosu.sleepin.domain.repository.TimetableImportPlan
 import com.kurosu.sleepin.domain.repository.TimetableImportRepository
 import com.kurosu.sleepin.domain.repository.TimetableImportResult
@@ -18,9 +21,10 @@ import com.kurosu.sleepin.domain.repository.TimetableImportResult
  * Room-backed implementation of [TimetableImportRepository].
  *
  * The whole import runs inside one transaction. That matters because an import combines several
- * writes — create or retarget a timetable, delete the old courses, insert the new ones and their
- * sessions — and a failure part-way through would otherwise leave the user with a timetable that is
- * empty or half-filled while the error message claims nothing was imported.
+ * writes — create or retarget a timetable, optionally create a schedule template with its periods,
+ * delete the old courses, insert the new ones and their sessions — and a failure part-way through
+ * would otherwise leave the user with a timetable that is empty or half-filled (or with an orphan
+ * schedule template) while the error message claims nothing was imported.
  *
  * The implementation works directly with DAOs instead of going through [CourseRepository] because a
  * bulk replacement must not open one transaction per course; the existing repository API is shaped
@@ -30,6 +34,7 @@ class TimetableImportRepositoryImpl(
     private val database: SleepInDatabase,
     private val timetableDao: TimetableDao,
     private val scheduleDao: ScheduleDao,
+    private val schedulePeriodDao: SchedulePeriodDao,
     private val courseDao: CourseDao,
     private val courseSessionDao: CourseSessionDao
 ) : TimetableImportRepository {
@@ -49,9 +54,8 @@ class TimetableImportRepositoryImpl(
         courses: List<CourseWithSessions>
     ): TimetableImportResult {
         // Checked up front so the user gets "作息表不存在" instead of a raw foreign-key failure.
-        if (scheduleDao.getById(plan.scheduleId) == null) {
-            return TimetableImportResult.ScheduleNotFound
-        }
+        val scheduleId = resolveScheduleId(plan.scheduleId, plan.newSchedule)
+            ?: return TimetableImportResult.ScheduleNotFound
 
         val now = System.currentTimeMillis()
         val timetableId = timetableDao.insert(
@@ -59,7 +63,7 @@ class TimetableImportRepositoryImpl(
                 name = plan.name,
                 totalWeeks = plan.totalWeeks,
                 startDate = plan.startDate,
-                scheduleId = plan.scheduleId,
+                scheduleId = scheduleId,
                 colorScheme = null,
                 // Activation is applied below, because it must also clear the flag on every other row.
                 isActive = false,
@@ -76,7 +80,8 @@ class TimetableImportRepositoryImpl(
         return TimetableImportResult.Imported(
             timetableId = timetableId,
             courseCount = courses.size,
-            sessionCount = sessionCount
+            sessionCount = sessionCount,
+            scheduleId = scheduleId
         )
     }
 
@@ -86,13 +91,12 @@ class TimetableImportRepositoryImpl(
     ): TimetableImportResult {
         val existing = timetableDao.getById(plan.timetableId)
             ?: return TimetableImportResult.TimetableNotFound
-        if (scheduleDao.getById(plan.scheduleId) == null) {
-            return TimetableImportResult.ScheduleNotFound
-        }
+        val scheduleId = resolveScheduleId(plan.scheduleId, plan.newSchedule)
+            ?: return TimetableImportResult.ScheduleNotFound
 
         timetableDao.update(
             existing.copy(
-                scheduleId = plan.scheduleId,
+                scheduleId = scheduleId,
                 updatedAt = System.currentTimeMillis()
             )
         )
@@ -101,8 +105,38 @@ class TimetableImportRepositoryImpl(
         return TimetableImportResult.Imported(
             timetableId = existing.id,
             courseCount = courses.size,
-            sessionCount = sessionCount
+            sessionCount = sessionCount,
+            scheduleId = scheduleId
         )
+    }
+
+    /**
+     * Returns the schedule the result should reference, creating [newSchedule] when the payload
+     * carried class times.
+     *
+     * Null means the schedule the plan named is not there (any more); callers turn that into
+     * [TimetableImportResult.ScheduleNotFound]. Creation happens before the timetable row is written
+     * so the timetable never points at a schedule that failed to be stored, and both statements are
+     * inside the same transaction as the rest of the import.
+     */
+    private suspend fun resolveScheduleId(
+        scheduleId: Long,
+        newSchedule: ImportScheduleDraft?
+    ): Long? {
+        if (newSchedule == null) {
+            return scheduleId.takeIf { scheduleDao.getById(it) != null }
+        }
+
+        val createdId = scheduleDao.insert(
+            ScheduleEntity(name = newSchedule.name, createdAt = System.currentTimeMillis())
+        )
+        schedulePeriodDao.insertAll(
+            newSchedule.periods.map { period ->
+                // Ids come from the caller's payload and the schedule id does not exist yet.
+                period.copy(id = 0L, scheduleId = createdId).toEntity()
+            }
+        )
+        return createdId
     }
 
     /**

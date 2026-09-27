@@ -21,6 +21,33 @@ sealed interface ImportTarget {
 }
 
 /**
+ * Where the class times of the imported timetable should come from.
+ *
+ * Two sources are possible and the user picks between them at confirmation time, which is the first
+ * moment the app knows whether the script actually read a time table: an academic portal may report
+ * only period numbers, and the app then refuses to invent the times.
+ */
+sealed interface ImportScheduleSource {
+
+    /**
+     * Use a schedule template the user already has.
+     *
+     * A non-positive id means "keep the target timetable's current template", which only makes sense
+     * when overwriting.
+     */
+    data class Existing(val scheduleId: Long) : ImportScheduleSource
+
+    /**
+     * Create a schedule template from the times the payload reported.
+     *
+     * Refused when the payload carries none, rather than silently falling back to an existing
+     * template: the user asked for the portal's times and would otherwise not be told they were
+     * missing.
+     */
+    data object FromPayload : ImportScheduleSource
+}
+
+/**
  * Turns a validated import payload into persisted courses.
  *
  * This is the domain layer's last chance to decide *what* gets written, so it owns the rules that
@@ -42,17 +69,17 @@ class CommitImportUseCase(
     private val planResolver = ImportPlanResolver(getTimetableDetailUseCase)
 
     /**
-     * Writes [submission] according to [target].
+     * Writes [submission] according to [target] and [scheduleSource].
      *
-     * @param scheduleId schedule template the resulting timetable should use. Required when creating
-     *   a timetable; when overwriting, a non-positive value means "keep the timetable's current
-     *   schedule". The caller is expected to have the user choose one, because an academic portal
-     *   usually reports only period numbers and the app refuses to invent class times.
+     * @param scheduleSource where the result's class times come from. [ImportScheduleSource.Existing]
+     *   with a non-positive id means "keep the timetable's current schedule";
+     *   [ImportScheduleSource.FromPayload] builds a new template from the payload's own times and is
+     *   refused when it carried none.
      */
     suspend operator fun invoke(
         submission: ImportSubmission,
         target: ImportTarget,
-        scheduleId: Long
+        scheduleSource: ImportScheduleSource
     ): TimetableImportResult {
         // Guarded here rather than only in the parser because this use case is the last point before
         // the write: overwriting a timetable with nothing would silently delete the user's courses.
@@ -60,7 +87,7 @@ class CommitImportUseCase(
             return TimetableImportResult.Rejected("导入数据里没有任何课程，已取消导入。")
         }
 
-        val plan = planResolver.resolve(submission, target, scheduleId)
+        val plan = planResolver.resolve(submission, target, scheduleSource)
         return when (plan) {
             is ImportPlanResolution.Rejected -> TimetableImportResult.Rejected(plan.message)
             ImportPlanResolution.TargetNotFound -> TimetableImportResult.TimetableNotFound

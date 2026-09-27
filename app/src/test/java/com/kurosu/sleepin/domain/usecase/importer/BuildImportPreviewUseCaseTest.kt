@@ -41,7 +41,7 @@ class BuildImportPreviewUseCaseTest {
                 )
             ),
             target = ImportTarget.NewTimetable,
-            scheduleId = SCHEDULE_ID
+            scheduleSource = ImportScheduleSource.Existing(SCHEDULE_ID)
         )
 
         val preview = (result as ImportPreviewResult.Ready).preview
@@ -59,7 +59,7 @@ class BuildImportPreviewUseCaseTest {
         val result = previewUseCase().invoke(
             submission = submission(courses = listOf(importCourse(name = "大学物理"))),
             target = ImportTarget.NewTimetable,
-            scheduleId = SCHEDULE_ID
+            scheduleSource = ImportScheduleSource.Existing(SCHEDULE_ID)
         )
 
         val preview = (result as ImportPreviewResult.Ready).preview
@@ -73,7 +73,7 @@ class BuildImportPreviewUseCaseTest {
             .invoke(
                 submission = submission(courses = listOf(importCourse(name = "课程 A"))),
                 target = ImportTarget.ExistingTimetable(timetableId = 5L),
-                scheduleId = SCHEDULE_ID
+                scheduleSource = ImportScheduleSource.Existing(SCHEDULE_ID)
             )
 
         val preview = (result as ImportPreviewResult.Ready).preview
@@ -93,7 +93,7 @@ class BuildImportPreviewUseCaseTest {
                     courses = listOf(importCourse(name = "课程 A", sessions = listOf(session(day = 1, from = 1, to = 2, weeks = listOf(1, 20)))))
                 ),
                 target = ImportTarget.ExistingTimetable(timetableId = 5L),
-                scheduleId = SCHEDULE_ID
+                scheduleSource = ImportScheduleSource.Existing(SCHEDULE_ID)
             )
 
         val preview = (result as ImportPreviewResult.Ready).preview
@@ -109,7 +109,7 @@ class BuildImportPreviewUseCaseTest {
         ).invoke(
             submission = submission(courses = listOf(importCourse(name = "课程 A"))),
             target = ImportTarget.ExistingTimetable(timetableId = 5L),
-            scheduleId = 0L
+            scheduleSource = ImportScheduleSource.Existing(0L)
         )
 
         val preview = (result as ImportPreviewResult.Ready).preview
@@ -126,7 +126,7 @@ class BuildImportPreviewUseCaseTest {
                 courses = listOf(importCourse(name = "课程 A", sessions = listOf(session(day = 1, from = 4, to = 6))))
             ),
             target = ImportTarget.NewTimetable,
-            scheduleId = SCHEDULE_ID
+            scheduleSource = ImportScheduleSource.Existing(SCHEDULE_ID)
         )
 
         val preview = (result as ImportPreviewResult.Ready).preview
@@ -139,7 +139,7 @@ class BuildImportPreviewUseCaseTest {
         val result = previewUseCase().invoke(
             submission = submission(courses = listOf(importCourse(name = "课程 A"))),
             target = ImportTarget.NewTimetable,
-            scheduleId = 0L
+            scheduleSource = ImportScheduleSource.Existing(0L)
         )
 
         assertTrue(result is ImportPreviewResult.Rejected)
@@ -150,7 +150,7 @@ class BuildImportPreviewUseCaseTest {
         val result = previewUseCase().invoke(
             submission = submission(courses = listOf(importCourse(name = "课程 A"))),
             target = ImportTarget.ExistingTimetable(timetableId = 404L),
-            scheduleId = SCHEDULE_ID
+            scheduleSource = ImportScheduleSource.Existing(SCHEDULE_ID)
         )
 
         assertEquals(ImportPreviewResult.TimetableNotFound, result)
@@ -161,10 +161,84 @@ class BuildImportPreviewUseCaseTest {
         val result = previewUseCase(schedules = emptyList()).invoke(
             submission = submission(courses = listOf(importCourse(name = "课程 A"))),
             target = ImportTarget.NewTimetable,
-            scheduleId = SCHEDULE_ID
+            scheduleSource = ImportScheduleSource.Existing(SCHEDULE_ID)
         )
 
         assertEquals(ImportPreviewResult.ScheduleNotFound, result)
+    }
+
+    @Test
+    fun preview_describesANewScheduleFromThePayload_whenThatSourceIsChosen() = runBlocking {
+        // No stored schedule at all: the times are the payload's, so nothing has to be looked up.
+        val result = previewUseCase(schedules = emptyList()).invoke(
+            submission = submission(
+                courses = listOf(importCourse(name = "课程 A", sessions = listOf(session(day = 1, from = 1, to = 2)))),
+                periods = listOf(
+                    period(1, LocalTime.of(8, 0), LocalTime.of(8, 45)),
+                    period(2, LocalTime.of(8, 55), LocalTime.of(9, 40))
+                )
+            ),
+            target = ImportTarget.NewTimetable,
+            scheduleSource = ImportScheduleSource.FromPayload
+        )
+
+        val preview = (result as ImportPreviewResult.Ready).preview
+        assertEquals(ImportScheduleSource.FromPayload, preview.scheduleSource)
+        // Zero means "created together with the courses": the id exists only after the write.
+        assertEquals(0L, preview.scheduleId)
+        assertEquals(2, preview.importedPeriodCount)
+        assertTrue("schedule label should name the new template: ${preview.scheduleLabel}", preview.scheduleLabel.contains("新建作息表"))
+        assertTrue("the payload's own times cover the periods it uses", preview.diagnostics.periodsMissingFromSchedule.isEmpty())
+    }
+
+    @Test
+    fun preview_reportsTheGapInThePayloadsOwnTimes() = runBlocking {
+        // The script timed periods 1-2 but the course occupies 1-4: the mismatch is inside the payload,
+        // and the user has to be told before an incomplete template is created.
+        val result = previewUseCase(schedules = emptyList()).invoke(
+            submission = submission(
+                courses = listOf(importCourse(name = "课程 A", sessions = listOf(session(day = 1, from = 1, to = 4)))),
+                periods = listOf(
+                    period(1, LocalTime.of(8, 0), LocalTime.of(8, 45)),
+                    period(2, LocalTime.of(8, 55), LocalTime.of(9, 40))
+                )
+            ),
+            target = ImportTarget.NewTimetable,
+            scheduleSource = ImportScheduleSource.FromPayload
+        )
+
+        val preview = (result as ImportPreviewResult.Ready).preview
+        assertEquals(listOf(3, 4), preview.diagnostics.periodsMissingFromSchedule)
+    }
+
+    @Test
+    fun preview_refusesThePayloadsTimes_whenThePayloadCarriedNone() = runBlocking {
+        val result = previewUseCase().invoke(
+            submission = submission(courses = listOf(importCourse(name = "课程 A"))),
+            target = ImportTarget.NewTimetable,
+            scheduleSource = ImportScheduleSource.FromPayload
+        )
+
+        assertTrue(result is ImportPreviewResult.Rejected)
+    }
+
+    @Test
+    fun preview_reportsTheExistingScheduleChoice_whenThePayloadAlsoCarriedTimes() = runBlocking {
+        val result = previewUseCase().invoke(
+            submission = submission(
+                courses = listOf(importCourse(name = "课程 A")),
+                periods = listOf(period(1, LocalTime.of(8, 0), LocalTime.of(8, 45)))
+            ),
+            target = ImportTarget.NewTimetable,
+            scheduleSource = ImportScheduleSource.Existing(SCHEDULE_ID)
+        )
+
+        val preview = (result as ImportPreviewResult.Ready).preview
+        assertEquals(ImportScheduleSource.Existing(SCHEDULE_ID), preview.scheduleSource)
+        assertEquals(SCHEDULE_ID, preview.scheduleId)
+        assertEquals("默认作息表", preview.scheduleLabel)
+        // Still reported, so the dialog can offer switching to the script's times.
+        assertEquals(1, preview.importedPeriodCount)
     }
 
     private fun previewUseCase(
@@ -206,8 +280,12 @@ class BuildImportPreviewUseCaseTest {
 
     private fun submission(
         timetable: ImportedTimetable? = null,
-        courses: List<ImportedCourse>
-    ): ImportSubmission = ImportSubmission(timetable = timetable, courses = courses)
+        courses: List<ImportedCourse>,
+        periods: List<ImportedSchedulePeriod> = emptyList()
+    ): ImportSubmission = ImportSubmission(timetable = timetable, courses = courses, periods = periods)
+
+    private fun period(periodNumber: Int, start: LocalTime, end: LocalTime): ImportedSchedulePeriod =
+        ImportedSchedulePeriod(periodNumber = periodNumber, startTime = start, endTime = end)
 
     private fun importCourse(
         name: String,

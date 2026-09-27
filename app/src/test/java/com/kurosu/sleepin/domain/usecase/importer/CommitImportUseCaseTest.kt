@@ -13,10 +13,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * Unit tests for turning a validated payload into a concrete import plan and persistence payload.
@@ -38,7 +40,7 @@ class CommitImportUseCaseTest {
                 courses = listOf(importCourse(name = "高等数学", weeks = (1..18).toList()))
             ),
             target = ImportTarget.NewTimetable,
-            scheduleId = 7L
+            scheduleSource = ImportScheduleSource.Existing(7L)
         )
 
         val plan = repository.lastPlan
@@ -63,7 +65,7 @@ class CommitImportUseCaseTest {
         useCase(
             submission = importSubmission(courses = listOf(importCourse(name = "大学物理"))),
             target = ImportTarget.NewTimetable,
-            scheduleId = 3L
+            scheduleSource = ImportScheduleSource.Existing(3L)
         )
 
         val plan = repository.lastPlan as TimetableImportPlan.CreateNew
@@ -79,7 +81,7 @@ class CommitImportUseCaseTest {
         val result = useCase(
             submission = importSubmission(courses = emptyList()),
             target = ImportTarget.ExistingTimetable(timetableId = 5L),
-            scheduleId = 3L
+            scheduleSource = ImportScheduleSource.Existing(3L)
         )
 
         assertTrue("expected a rejection but got $result", result is TimetableImportResult.Rejected)
@@ -100,7 +102,7 @@ class CommitImportUseCaseTest {
                 )
             ),
             target = ImportTarget.NewTimetable,
-            scheduleId = 1L
+            scheduleSource = ImportScheduleSource.Existing(1L)
         )
 
         assertEquals(
@@ -117,7 +119,7 @@ class CommitImportUseCaseTest {
         useCase(
             submission = importSubmission(courses = listOf(importCourse(name = "课程 A", color = 0xFF123456.toInt()))),
             target = ImportTarget.NewTimetable,
-            scheduleId = 1L
+            scheduleSource = ImportScheduleSource.Existing(1L)
         )
 
         assertEquals(0xFF123456.toInt(), repository.lastCourses.single().course.color)
@@ -138,7 +140,7 @@ class CommitImportUseCaseTest {
                 )
             ),
             target = ImportTarget.NewTimetable,
-            scheduleId = 1L
+            scheduleSource = ImportScheduleSource.Existing(1L)
         )
 
         val rules = repository.lastCourses.map { it.sessions.single() }
@@ -176,7 +178,7 @@ class CommitImportUseCaseTest {
                 )
             ),
             target = ImportTarget.NewTimetable,
-            scheduleId = 1L
+            scheduleSource = ImportScheduleSource.Existing(1L)
         )
 
         val aggregate = repository.lastCourses.single()
@@ -204,7 +206,7 @@ class CommitImportUseCaseTest {
                 courses = listOf(importCourse(name = "课程 A", weeks = (1..20).toList()))
             ),
             target = ImportTarget.ExistingTimetable(timetableId = 5L),
-            scheduleId = 9L
+            scheduleSource = ImportScheduleSource.Existing(9L)
         )
 
         val plan = repository.lastPlan
@@ -225,7 +227,7 @@ class CommitImportUseCaseTest {
         useCase(
             submission = importSubmission(courses = listOf(importCourse(name = "课程 A"))),
             target = ImportTarget.ExistingTimetable(timetableId = 5L),
-            scheduleId = 0L
+            scheduleSource = ImportScheduleSource.Existing(0L)
         )
 
         val plan = repository.lastPlan as TimetableImportPlan.Overwrite
@@ -240,7 +242,7 @@ class CommitImportUseCaseTest {
         val result = useCase(
             submission = importSubmission(courses = listOf(importCourse(name = "课程 A"))),
             target = ImportTarget.ExistingTimetable(timetableId = 404L),
-            scheduleId = 1L
+            scheduleSource = ImportScheduleSource.Existing(1L)
         )
 
         assertEquals(TimetableImportResult.TimetableNotFound, result)
@@ -255,7 +257,7 @@ class CommitImportUseCaseTest {
         val result = useCase(
             submission = importSubmission(courses = listOf(importCourse(name = "课程 A"))),
             target = ImportTarget.NewTimetable,
-            scheduleId = 0L
+            scheduleSource = ImportScheduleSource.Existing(0L)
         )
 
         assertTrue("expected a rejection but got $result", result is TimetableImportResult.Rejected)
@@ -274,11 +276,74 @@ class CommitImportUseCaseTest {
                 courses = listOf(importCourse(name = "课程 A"))
             ),
             target = ImportTarget.NewTimetable,
-            scheduleId = 1L
+            scheduleSource = ImportScheduleSource.Existing(1L)
         )
 
         assertTrue("expected a rejection but got $result", result is TimetableImportResult.Rejected)
         assertNull(repository.lastPlan)
+    }
+
+    @Test
+    fun invoke_createsAScheduleFromThePayload_whenTheUserChoseThePayloadsTimes() = runBlocking {
+        val repository = RecordingTimetableImportRepository()
+
+        commitUseCase(repository)(
+            submission = importSubmission(
+                courses = listOf(importCourse(name = "课程 A")),
+                periods = listOf(
+                    period(1, LocalTime.of(8, 0), LocalTime.of(8, 45)),
+                    period(2, LocalTime.of(8, 55), LocalTime.of(9, 40))
+                )
+            ),
+            target = ImportTarget.NewTimetable,
+            scheduleSource = ImportScheduleSource.FromPayload
+        )
+
+        val plan = repository.lastPlan as TimetableImportPlan.CreateNew
+        val schedule = plan.newSchedule
+        assertNotNull(schedule)
+        assertEquals("导入的作息表", schedule!!.name)
+        assertEquals(listOf(1, 2), schedule.periods.map { it.periodNumber })
+        assertEquals(LocalTime.of(8, 0), schedule.periods.first().startTime)
+        // No template exists yet, so the plan must not name one: the repository creates it inside the
+        // same transaction and links the timetable to what it created.
+        assertEquals(0L, plan.scheduleId)
+    }
+
+    @Test
+    fun invoke_refusesThePayloadsTimes_whenThePayloadCarriedNone() = runBlocking {
+        val repository = RecordingTimetableImportRepository()
+
+        val result = commitUseCase(repository)(
+            submission = importSubmission(courses = listOf(importCourse(name = "课程 A"))),
+            target = ImportTarget.NewTimetable,
+            scheduleSource = ImportScheduleSource.FromPayload
+        )
+
+        // Refused rather than silently falling back to an existing template: the user asked for the
+        // portal's times and has to be told there were none.
+        assertTrue("expected a rejection but got $result", result is TimetableImportResult.Rejected)
+        assertNull(repository.lastPlan)
+    }
+
+    @Test
+    fun invoke_carriesThePayloadsTimes_whenOverwritingIntoANewSchedule() = runBlocking {
+        val repository = RecordingTimetableImportRepository()
+        val useCase = commitUseCase(repository, existingTimetable(id = 5L, totalWeeks = 16, scheduleId = 3L))
+
+        useCase(
+            submission = importSubmission(
+                courses = listOf(importCourse(name = "课程 A")),
+                periods = listOf(period(1, LocalTime.of(8, 0), LocalTime.of(8, 45)))
+            ),
+            target = ImportTarget.ExistingTimetable(timetableId = 5L),
+            scheduleSource = ImportScheduleSource.FromPayload
+        )
+
+        val plan = repository.lastPlan as TimetableImportPlan.Overwrite
+        assertEquals(5L, plan.timetableId)
+        assertEquals(1, plan.newSchedule?.periods?.size)
+        assertEquals(0L, plan.scheduleId)
     }
 
     private fun commitUseCase(
@@ -302,8 +367,12 @@ class CommitImportUseCaseTest {
 
     private fun importSubmission(
         timetable: ImportedTimetable? = null,
-        courses: List<ImportedCourse>
-    ): ImportSubmission = ImportSubmission(timetable = timetable, courses = courses)
+        courses: List<ImportedCourse>,
+        periods: List<ImportedSchedulePeriod> = emptyList()
+    ): ImportSubmission = ImportSubmission(timetable = timetable, courses = courses, periods = periods)
+
+    private fun period(periodNumber: Int, start: LocalTime, end: LocalTime): ImportedSchedulePeriod =
+        ImportedSchedulePeriod(periodNumber = periodNumber, startTime = start, endTime = end)
 
     private fun importCourse(
         name: String,

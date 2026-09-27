@@ -11,6 +11,7 @@ import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ImportParseResult
 import com.kurosu.sleepin.domain.usecase.importer.ImportPreview
 import com.kurosu.sleepin.domain.usecase.importer.ImportPreviewResult
+import com.kurosu.sleepin.domain.usecase.importer.ImportScheduleSource
 import com.kurosu.sleepin.domain.usecase.importer.ImportSubmission
 import com.kurosu.sleepin.domain.usecase.importer.ImportTarget
 import com.kurosu.sleepin.domain.usecase.importer.ParseImportSubmissionUseCase
@@ -67,10 +68,14 @@ data class ImportTimetableOptionUi(
  * The submission is kept in the state rather than written immediately so the confirmation dialog can
  * describe exactly what will be stored, and so cancelling really is a no-op. The description itself
  * comes from [preview], which was resolved by the same rules the write will follow.
+ *
+ * [target] and [submission] are kept alongside the preview because the user can still switch where
+ * the class times come from, and rebuilding the summary needs both.
  */
 data class ImportPendingCommit(
     val callId: String,
     val submission: ImportSubmission,
+    val target: ImportTarget,
     val preview: ImportPreview
 )
 
@@ -500,7 +505,7 @@ class ImportWebViewModel(
                 val result = commitImportUseCase(
                     submission = pending.submission,
                     target = preview.target,
-                    scheduleId = preview.scheduleId
+                    scheduleSource = preview.scheduleSource
                 )
             ) {
                 is TimetableImportResult.Imported -> {
@@ -622,13 +627,23 @@ class ImportWebViewModel(
                 ?.let { id -> ImportTarget.ExistingTimetable(id) }
                 ?: ImportTarget.NewTimetable
 
-            when (val preview = buildImportPreviewUseCase(submission, target, scheduleId)) {
+            // Default to the times the script read, when it read any: the portal's own class times are
+            // closer to the truth than whatever template happens to be selected, and the user can
+            // still switch to an existing one in the dialog below.
+            val scheduleSource = if (submission.periods.isEmpty()) {
+                ImportScheduleSource.Existing(scheduleId)
+            } else {
+                ImportScheduleSource.FromPayload
+            }
+
+            when (val preview = buildImportPreviewUseCase(submission, target, scheduleSource)) {
                 is ImportPreviewResult.Ready -> _uiState.update {
                     it.copy(
                         isPreparingCommit = false,
                         pendingCommit = ImportPendingCommit(
                             callId = request.callId,
                             submission = submission,
+                            target = target,
                             preview = preview.preview
                         )
                     )
@@ -641,6 +656,43 @@ class ImportWebViewModel(
                     failPrepare(request.callId, "目标课程表不存在，可能已被删除。")
 
                 is ImportPreviewResult.Rejected -> failPrepare(request.callId, preview.message)
+            }
+        }
+    }
+
+    /**
+     * Switches where the imported class times come from, and rebuilds the summary.
+     *
+     * Rebuilding rather than patching the preview is what keeps one rule in one place: the same use
+     * case that produced the confirmed numbers produces them again for the other source, so the
+     * dialog cannot end up describing a combination that was never resolvable.
+     */
+    fun onScheduleSourceSelected(scheduleSource: ImportScheduleSource) {
+        val pending = _uiState.value.pendingCommit ?: return
+        if (pending.preview.scheduleSource == scheduleSource) return
+        // Guarded like a first preparation: a second tap while the summary is being rebuilt would
+        // otherwise race its own result.
+        if (_uiState.value.isPreparingCommit) return
+        _uiState.update { it.copy(isPreparingCommit = true) }
+
+        viewModelScope.launch {
+            when (val preview = buildImportPreviewUseCase(pending.submission, pending.target, scheduleSource)) {
+                is ImportPreviewResult.Ready -> _uiState.update { state ->
+                    // The confirmation may have been cancelled while this ran.
+                    val currentPending = state.pendingCommit ?: return@update state
+                    state.copy(
+                        isPreparingCommit = false,
+                        pendingCommit = currentPending.copy(preview = preview.preview)
+                    )
+                }
+
+                ImportPreviewResult.ScheduleNotFound ->
+                    failPrepare(pending.callId, "所选作息表不存在，请重新选择作息表后再导入。")
+
+                ImportPreviewResult.TimetableNotFound ->
+                    failPrepare(pending.callId, "目标课程表不存在，可能已被删除。")
+
+                is ImportPreviewResult.Rejected -> failPrepare(pending.callId, preview.message)
             }
         }
     }
@@ -682,6 +734,11 @@ class ImportWebViewModel(
             append(result.sessionCount)
             append(" 条课时。")
             if (preview.target is ImportTarget.NewTimetable) append("新课表已设为当前课表。")
+            // Worth saying explicitly: the user asked for the portal's times, and a new template in
+            // their schedule list is the evidence that it happened.
+            if (preview.scheduleSource == ImportScheduleSource.FromPayload) {
+                append("\n\n已按方案提供的时间新建了一个作息表。")
+            }
             if (missingPeriods.isNotEmpty()) {
                 append("\n\n第 ")
                 append(formatPeriodNumbers(missingPeriods))
@@ -690,7 +747,10 @@ class ImportWebViewModel(
         }
         return ImportSuccessNotice(
             message = message,
-            scheduleIdToFix = preview.scheduleId.takeIf { preview.diagnostics.hasScheduleMismatch }
+            // Prefer the schedule the write actually left behind: an import that created a template
+            // from the portal's times only learns its id once the write ran.
+            scheduleIdToFix = (result.scheduleId.takeIf { it > 0L } ?: preview.scheduleId)
+                .takeIf { preview.diagnostics.hasScheduleMismatch }
         )
     }
 

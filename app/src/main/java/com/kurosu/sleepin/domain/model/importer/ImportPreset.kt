@@ -14,7 +14,17 @@ enum class ImportPresetSourceKind {
     CUSTOM,
 
     /** Downloaded from the configured preset source. */
-    REMOTE
+    REMOTE,
+
+    /**
+     * Synthesized by the app itself, for testing the import flow without a real portal.
+     *
+     * A preset of this kind can only appear when something supplies one: the debug build registers
+     * a source that hands out a fixed sample, and release builds register no such source. Keeping this
+     * a separate kind (rather than reusing [BUNDLED]) is what lets a preset be read back from the
+     * source that owns it, and keeps the sample from ever colliding with a real preset.
+     */
+    DEBUG
 }
 
 /**

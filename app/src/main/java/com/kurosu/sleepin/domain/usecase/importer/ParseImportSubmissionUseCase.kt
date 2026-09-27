@@ -4,6 +4,8 @@ import com.kurosu.sleepin.data.importer.ImportPayloadParser
 import com.kurosu.sleepin.domain.model.MAX_SEMESTER_WEEK_COUNT
 import com.kurosu.sleepin.domain.model.MAX_SUPPORTED_PERIOD_NUMBER
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 /**
@@ -18,6 +20,11 @@ import java.time.format.DateTimeParseException
  * Deliberately *not* validated here: whether a referenced period exists in the target schedule, and
  * whether a week fits the semester length. Both depend on the target the user picks at commit time,
  * and neither is an error — they are mismatches the user is expected to resolve.
+ *
+ * The optional `periods` block is validated strictly (each entry needs a period number, a start and
+ * an end, and no number may repeat). A malformed time table is refused rather than partially used:
+ * the alternative is a timetable whose class times are quietly half-invented, and the only party who
+ * can fix it is the script author, who needs a message naming the offending entry.
  */
 class ParseImportSubmissionUseCase(
     private val parser: ImportPayloadParser
@@ -46,6 +53,11 @@ class ParseImportSubmissionUseCase(
         val timetable = when (val outcome = validateTimetable(draft.timetable)) {
             is TimetableValidation.Invalid -> return reject(outcome.message)
             is TimetableValidation.Valid -> outcome.value
+        }
+
+        val periods = when (val outcome = validatePeriods(draft.periods)) {
+            is PeriodValidation.Invalid -> return reject(outcome.message)
+            is PeriodValidation.Valid -> outcome.value
         }
 
         val courseDrafts = draft.courses
@@ -127,9 +139,76 @@ class ParseImportSubmissionUseCase(
         }
 
         return ImportParseResult.Accepted(
-            ImportSubmission(timetable = timetable, courses = courses)
+            ImportSubmission(timetable = timetable, courses = courses, periods = periods)
         )
     }
+
+    /**
+     * Validates the optional class-time block.
+     *
+     * An empty or missing block means "this portal does not report class times", which is a normal
+     * state rather than an error: the user then picks one of their own schedules.
+     */
+    private fun validatePeriods(drafts: List<ImportPeriodDraft>?): PeriodValidation {
+        if (drafts.isNullOrEmpty()) return PeriodValidation.Valid(emptyList())
+        if (drafts.size > MAX_SUPPORTED_PERIOD_NUMBER) {
+            return PeriodValidation.Invalid(
+                "periods 包含 ${drafts.size} 条节次时间，超过上限 $MAX_SUPPORTED_PERIOD_NUMBER，请检查脚本是否多带了数据。"
+            )
+        }
+
+        val periods = mutableListOf<ImportedSchedulePeriod>()
+        val seenPeriodNumbers = mutableSetOf<Int>()
+        drafts.forEachIndexed { index, draft ->
+            val path = "periods[$index]"
+
+            val periodNumber = draft.periodNumber
+                ?: return PeriodValidation.Invalid("$path 缺少 period（节次号）。")
+            if (periodNumber !in 1..MAX_SUPPORTED_PERIOD_NUMBER) {
+                return PeriodValidation.Invalid(
+                    "$path 的 period 应在 1 到 $MAX_SUPPORTED_PERIOD_NUMBER 之间，当前为 $periodNumber。"
+                )
+            }
+            // Duplicates are refused rather than last-one-wins: two times for one period means the
+            // payload does not describe a single schedule, and picking either one would be a guess.
+            if (!seenPeriodNumbers.add(periodNumber)) {
+                return PeriodValidation.Invalid(
+                    "$path 的 period $periodNumber 与前面的节次重复，无法确定用哪个时间。"
+                )
+            }
+
+            val startText = draft.startTime.trimmedOrNull()
+                ?: return PeriodValidation.Invalid("$path 缺少 start（开始时间）。")
+            val endText = draft.endTime.trimmedOrNull()
+                ?: return PeriodValidation.Invalid("$path 缺少 end（结束时间）。")
+            val startTime = parseTimeOfDay(startText)
+                ?: return PeriodValidation.Invalid("$path 的 start 格式应为 HH:mm，当前为 \"$startText\"。")
+            val endTime = parseTimeOfDay(endText)
+                ?: return PeriodValidation.Invalid("$path 的 end 格式应为 HH:mm，当前为 \"$endText\"。")
+            if (endTime <= startTime) {
+                return PeriodValidation.Invalid("$path 的结束时间 $endText 必须晚于开始时间 $startText。")
+            }
+
+            periods += ImportedSchedulePeriod(
+                periodNumber = periodNumber,
+                startTime = startTime,
+                endTime = endTime
+            )
+        }
+
+        return PeriodValidation.Valid(periods.sortedBy { period -> period.periodNumber })
+    }
+
+    /**
+     * Reads a wall-clock time, tolerating `8:00` as well as `08:00`.
+     *
+     * Being lenient about a missing leading zero is deliberate: it is a formatting habit, not an
+     * ambiguity, and refusing the whole payload over it would punish the user for a script's style.
+     */
+    private fun parseTimeOfDay(text: String): LocalTime? = TIME_FORMATTERS
+        .firstNotNullOfOrNull { formatter ->
+            runCatching { LocalTime.parse(text, formatter) }.getOrNull()
+        }
 
     private fun validateTimetable(draft: ImportTimetableDraft?): TimetableValidation {
         if (draft == null) return TimetableValidation.Valid(null)
@@ -174,6 +253,12 @@ class ParseImportSubmissionUseCase(
         data class Invalid(val message: String) : TimetableValidation
     }
 
+    /** Internal outcome of the optional class-time block. */
+    private sealed interface PeriodValidation {
+        data class Valid(val value: List<ImportedSchedulePeriod>) : PeriodValidation
+        data class Invalid(val message: String) : PeriodValidation
+    }
+
     private companion object {
         /**
          * Payload contract revision this build understands. Bumped only for breaking changes; new
@@ -186,6 +271,13 @@ class ParseImportSubmissionUseCase(
          * dozen courses, so this only trips on a script that serialized far more than intended.
          */
         const val MAX_IMPORTED_COURSE_COUNT = 1000
+
+        /** Accepted spellings of one class time, tried in order. */
+        val TIME_FORMATTERS: List<DateTimeFormatter> = listOf(
+            DateTimeFormatter.ISO_LOCAL_TIME,
+            DateTimeFormatter.ofPattern("H:mm"),
+            DateTimeFormatter.ofPattern("H:mm:ss")
+        )
     }
 }
 

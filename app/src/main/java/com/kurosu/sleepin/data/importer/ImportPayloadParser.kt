@@ -3,6 +3,7 @@ package com.kurosu.sleepin.data.importer
 import com.kurosu.sleepin.domain.usecase.importer.ImportCourseDraft
 import com.kurosu.sleepin.domain.usecase.importer.ImportPayloadDecodeResult
 import com.kurosu.sleepin.domain.usecase.importer.ImportPayloadDraft
+import com.kurosu.sleepin.domain.usecase.importer.ImportPeriodDraft
 import com.kurosu.sleepin.domain.usecase.importer.ImportSessionDraft
 import com.kurosu.sleepin.domain.usecase.importer.ImportTimetableDraft
 import kotlinx.serialization.SerializationException
@@ -53,10 +54,17 @@ class ImportPayloadParser {
             ImportPayloadDraft(
                 schemaVersion = dto.schema,
                 timetable = dto.timetable?.toDraft(),
-                courses = dto.courses?.map { it.toDraft() }
+                courses = dto.courses?.map { it.toDraft() },
+                periods = dto.periods?.map { it.toDraft() }
             )
         )
     }
+
+    private fun ImportPeriodDto.toDraft(): ImportPeriodDraft = ImportPeriodDraft(
+        periodNumber = period,
+        startTime = start,
+        endTime = end
+    )
 
     private fun ImportTimetableDto.toDraft(): ImportTimetableDraft = ImportTimetableDraft(
         name = name,
@@ -102,7 +110,8 @@ class ImportPayloadParser {
 internal data class ImportPayloadDto(
     val schema: Int? = null,
     val timetable: ImportTimetableDto? = null,
-    val courses: List<ImportCourseDto>? = null
+    val courses: List<ImportCourseDto>? = null,
+    val periods: List<ImportPeriodDto>? = null
 )
 
 /**
@@ -138,4 +147,18 @@ internal data class ImportSessionDto(
     val to: Int? = null,
     val location: String? = null,
     val weeks: List<Int>? = null
+)
+
+/**
+ * Wire shape of one class-time entry reported by the script.
+ *
+ * Times are wall-clock text without a date (`"08:00"`), because an import describes a weekly
+ * template rather than one particular day. The block is optional: a portal that only reports period
+ * numbers cannot supply it, and the user then picks an existing schedule instead.
+ */
+@Serializable
+internal data class ImportPeriodDto(
+    val period: Int? = null,
+    val start: String? = null,
+    val end: String? = null
 )

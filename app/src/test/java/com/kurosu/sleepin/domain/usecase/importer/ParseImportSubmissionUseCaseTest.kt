@@ -6,6 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * Unit tests for the import payload contract: which payloads are accepted, and how rejections point
@@ -14,6 +15,87 @@ import java.time.LocalDate
 class ParseImportSubmissionUseCaseTest {
 
     private val useCase = ParseImportSubmissionUseCase(ImportPayloadParser())
+
+    @Test
+    fun invoke_acceptsOptionalPeriods_andSortsThemByPeriodNumber() {
+        val result = useCase(
+            """
+            {
+              "schema": 1,
+              "periods": [
+                { "period": 2, "start": "08:55", "end": "09:40" },
+                { "period": 1, "start": "8:00", "end": "08:45" }
+              ],
+              "courses": [
+                { "name": "高等数学", "sessions": [ { "day": 1, "from": 1, "to": 2, "weeks": [1] } ] }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val periods = accepted(result).periods
+        assertEquals(listOf(1, 2), periods.map { it.periodNumber })
+        // "8:00" is accepted as well as "08:00": a missing leading zero is a habit, not an ambiguity.
+        assertEquals(LocalTime.of(8, 0), periods.first().startTime)
+        assertEquals(LocalTime.of(9, 40), periods.last().endTime)
+    }
+
+    @Test
+    fun invoke_acceptsPayload_withoutPeriodsBlock() {
+        val result = useCase(
+            """
+            {
+              "schema": 1,
+              "courses": [
+                { "name": "线性代数", "sessions": [ { "day": 2, "from": 3, "to": 4, "weeks": [1] } ] }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        // An empty list rather than null: "this portal reports no class times" is a normal state.
+        assertTrue(accepted(result).periods.isEmpty())
+    }
+
+    @Test
+    fun invoke_rejectsPeriods_whenAnEntryIsIncompleteOrImpossible() {
+        assertTrue(rejectionMessage(useCase(coursePayloadWithPeriods("{ \"period\": 1, \"end\": \"08:45\" }")))
+            .contains("periods[0] 缺少 start"))
+        assertTrue(rejectionMessage(useCase(coursePayloadWithPeriods("{ \"period\": 1, \"start\": \"早上八点\", \"end\": \"08:45\" }")))
+            .contains("start 格式应为 HH:mm"))
+        assertTrue(rejectionMessage(useCase(coursePayloadWithPeriods("{ \"period\": 1, \"start\": \"09:00\", \"end\": \"08:45\" }")))
+            .contains("必须晚于开始时间"))
+        assertTrue(rejectionMessage(useCase(coursePayloadWithPeriods("{ \"period\": 0, \"start\": \"08:00\", \"end\": \"08:45\" }")))
+            .contains("period 应在 1 到"))
+    }
+
+    @Test
+    fun invoke_rejectsPeriods_whenOnePeriodNumberIsDefinedTwice() {
+        val message = rejectionMessage(
+            useCase(
+                coursePayloadWithPeriods(
+                    "{ \"period\": 1, \"start\": \"08:00\", \"end\": \"08:45\" }",
+                    "{ \"period\": 1, \"start\": \"09:00\", \"end\": \"09:45\" }"
+                )
+            )
+        )
+
+        // Last-one-wins would be a guess about which time is real, so the payload is refused.
+        assertTrue(message, message.contains("periods[1] 的 period 1 与前面的节次重复"))
+    }
+
+    /**
+     * Builds a payload that is valid apart from its `periods` entries.
+     */
+    private fun coursePayloadWithPeriods(vararg periods: String): String = """
+        {
+          "schema": 1,
+          "periods": [ ${periods.joinToString(", ")} ],
+          "courses": [
+            { "name": "高等数学", "sessions": [ { "day": 1, "from": 1, "to": 2, "weeks": [1] } ] }
+          ]
+        }
+    """.trimIndent()
 
     @Test
     fun invoke_acceptsPayload_andNormalizesOptionalFieldsAndWeeks() {
