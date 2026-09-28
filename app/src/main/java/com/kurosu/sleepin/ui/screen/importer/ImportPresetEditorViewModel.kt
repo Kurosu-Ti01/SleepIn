@@ -4,12 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kurosu.sleepin.domain.model.importer.CustomImportPresetDraft
+import com.kurosu.sleepin.domain.model.importer.FamilyAssemblyRequest
+import com.kurosu.sleepin.domain.model.importer.FamilyAssemblyResult
 import com.kurosu.sleepin.domain.model.importer.ImportPresetAddResult
 import com.kurosu.sleepin.domain.model.importer.ImportPresetGroup
 import com.kurosu.sleepin.domain.model.importer.ImportPresetSchool
 import com.kurosu.sleepin.domain.usecase.importer.AddCustomImportPresetUseCase
 import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ReadImportScriptUseCase
+import com.kurosu.sleepin.domain.usecase.importer.ReuseLocalFamilyUseCase
 import com.kurosu.sleepin.domain.usecase.importer.UpdateCustomImportPresetUseCase
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +33,24 @@ import kotlinx.coroutines.launch
 internal const val SCRIPT_PREVIEW_CHAR_LENGTH = 1200
 
 /**
+ * Where the script of a preset comes from.
+ *
+ * Two ways, because the same person can be in either situation: they already have a working script, or
+ * they want to reuse a family this device cached and only describe what differs.
+ */
+enum class ImportPresetScriptSource {
+    /** The user supplied the whole script, from a file or the clipboard. */
+    WRITTEN,
+
+    /**
+     * The script is assembled from a cached family plus the values entered here.
+     *
+     * Only possible once a source has been imported, since that is the only way a family gets cached.
+     */
+    FAMILY
+}
+
+/**
  * State of the custom preset editor.
  */
 data class ImportPresetEditorUiState(
@@ -48,10 +69,35 @@ data class ImportPresetEditorUiState(
     val scriptText: String = "",
     /** Where the current script came from, for the user to confirm it is the file they meant. */
     val scriptSourceLabel: String = "",
+    val scriptSource: ImportPresetScriptSource = ImportPresetScriptSource.WRITTEN,
+    /**
+     * Families cached on this device that could be reused.
+     *
+     * Empty is the normal state on a device that never imported a source, so the screen explains that
+     * instead of showing an empty picker.
+     */
+    val availableFamilyIds: List<String> = emptyList(),
+    val selectedFamilyId: String? = null,
+    /** Preset values as JSON; blank means "use the family defaults as they are". */
+    val configJson: String = "",
+    /** Optional school-specific override, appended after the family adapter. */
+    val overrideText: String = "",
     val isSaving: Boolean = false,
     val message: String? = null
 ) {
     val hasScript: Boolean get() = scriptText.isNotBlank()
+
+    /**
+     * Whether the form could be saved as it stands.
+     *
+     * Only decides whether the button looks available; the rules that make a preset storable stay in
+     * the use case that accepts it.
+     */
+    val canSave: Boolean
+        get() = when (scriptSource) {
+            ImportPresetScriptSource.WRITTEN -> hasScript
+            ImportPresetScriptSource.FAMILY -> selectedFamilyId != null
+        }
 
     val scriptCharacterCount: Int get() = scriptText.length
 
@@ -84,7 +130,8 @@ class ImportPresetEditorViewModel(
     private val getImportPresetsUseCase: GetImportPresetsUseCase,
     private val readImportScriptUseCase: ReadImportScriptUseCase,
     private val addCustomImportPresetUseCase: AddCustomImportPresetUseCase,
-    private val updateCustomImportPresetUseCase: UpdateCustomImportPresetUseCase
+    private val updateCustomImportPresetUseCase: UpdateCustomImportPresetUseCase,
+    private val reuseLocalFamilyUseCase: ReuseLocalFamilyUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ImportPresetEditorUiState(isEditMode = presetId != null))
@@ -95,6 +142,7 @@ class ImportPresetEditorViewModel(
 
     init {
         loadForm(presetId)
+        loadReusableFamilies()
     }
 
     fun consumeMessage() {
@@ -163,6 +211,22 @@ class ImportPresetEditorViewModel(
         _uiState.update { it.copy(scriptText = text, scriptSourceLabel = sourceLabel) }
     }
 
+    fun onScriptSourceChange(value: ImportPresetScriptSource) {
+        _uiState.update { it.copy(scriptSource = value) }
+    }
+
+    fun onFamilySelected(familyId: String) {
+        _uiState.update { it.copy(selectedFamilyId = familyId) }
+    }
+
+    fun onConfigChange(value: String) {
+        _uiState.update { it.copy(configJson = value) }
+    }
+
+    fun onOverrideChange(value: String) {
+        _uiState.update { it.copy(overrideText = value) }
+    }
+
     fun clearScript() {
         _uiState.update { it.copy(scriptText = "", scriptSourceLabel = "") }
     }
@@ -179,6 +243,58 @@ class ImportPresetEditorViewModel(
     }
 
     /**
+     * Reads which families could be reused.
+     *
+     * Separate from [loadForm] because it describes the device rather than the preset being edited, and
+     * because its answer decides whether the reuse option can be offered at all.
+     */
+    private fun loadReusableFamilies() {
+        viewModelScope.launch {
+            val familyIds = reuseLocalFamilyUseCase.availableFamilyIds()
+            _uiState.update { state ->
+                state.copy(
+                    availableFamilyIds = familyIds,
+                    // A family that is no longer available must not stay selected.
+                    selectedFamilyId = state.selectedFamilyId?.takeIf { it in familyIds }
+                )
+            }
+        }
+    }
+
+    /**
+     * The script to store: the user's own text, or one assembled from a cached family.
+     *
+     * Resolved before the draft is built, so the storage layer keeps receiving one finished script
+     * whichever way it was produced, and no storage rule has to know about families.
+     *
+     * @return null after reporting why nothing could be built.
+     */
+    private suspend fun resolveScriptText(state: ImportPresetEditorUiState): String? {
+        if (state.scriptSource == ImportPresetScriptSource.WRITTEN) return state.scriptText
+
+        val familyId = state.selectedFamilyId
+        if (familyId == null) {
+            _uiState.update { it.copy(message = "请选择要复用的族。") }
+            return null
+        }
+
+        val request = FamilyAssemblyRequest(
+            familyId = familyId,
+            presetName = state.name,
+            configJson = state.configJson,
+            overrideText = state.overrideText
+        )
+        return when (val assembled = reuseLocalFamilyUseCase.assemble(request)) {
+            is FamilyAssemblyResult.Assembled -> assembled.script
+
+            is FamilyAssemblyResult.Failed -> {
+                _uiState.update { it.copy(message = assembled.message) }
+                null
+            }
+        }
+    }
+
+    /**
      * Stores the form.
      *
      * @param runNow whether to try the preset immediately after saving. Offered because the loop that
@@ -187,22 +303,29 @@ class ImportPresetEditorViewModel(
      */
     fun save(runNow: Boolean) {
         if (_uiState.value.isSaving) return
-        val state = _uiState.value
-        val draft = CustomImportPresetDraft(
-            name = state.name,
-            group = state.group,
-            initial = state.initial,
-            startUrl = state.startUrl,
-            description = state.description,
-            maintainer = state.maintainer,
-            scriptText = state.scriptText,
-            schoolId = state.schoolId,
-            schoolName = state.schoolName,
-            schoolCode = state.schoolCode
-        )
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
+            val state = _uiState.value
+            val scriptText = resolveScriptText(state)
+            if (scriptText == null) {
+                _uiState.update { it.copy(isSaving = false) }
+                return@launch
+            }
+
+            val draft = CustomImportPresetDraft(
+                name = state.name,
+                group = state.group,
+                initial = state.initial,
+                startUrl = state.startUrl,
+                description = state.description,
+                maintainer = state.maintainer,
+                scriptText = scriptText,
+                schoolId = state.schoolId,
+                schoolName = state.schoolName,
+                schoolCode = state.schoolCode
+            )
+
             val result = if (presetId == null) {
                 addCustomImportPresetUseCase(draft)
             } else {
@@ -290,7 +413,8 @@ class ImportPresetEditorViewModel(
             getImportPresetsUseCase: GetImportPresetsUseCase,
             readImportScriptUseCase: ReadImportScriptUseCase,
             addCustomImportPresetUseCase: AddCustomImportPresetUseCase,
-            updateCustomImportPresetUseCase: UpdateCustomImportPresetUseCase
+            updateCustomImportPresetUseCase: UpdateCustomImportPresetUseCase,
+            reuseLocalFamilyUseCase: ReuseLocalFamilyUseCase
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -300,7 +424,8 @@ class ImportPresetEditorViewModel(
                         getImportPresetsUseCase = getImportPresetsUseCase,
                         readImportScriptUseCase = readImportScriptUseCase,
                         addCustomImportPresetUseCase = addCustomImportPresetUseCase,
-                        updateCustomImportPresetUseCase = updateCustomImportPresetUseCase
+                        updateCustomImportPresetUseCase = updateCustomImportPresetUseCase,
+                        reuseLocalFamilyUseCase = reuseLocalFamilyUseCase
                     ) as T
                 }
             }

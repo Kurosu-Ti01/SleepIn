@@ -255,7 +255,9 @@ fun SleepInNavHost(
             val vm: ImportPresetListViewModel = viewModel(
                 factory = ImportPresetListViewModel.factory(
                     getImportPresetsUseCase = app.getImportPresetsUseCase,
-                    removeCustomImportPresetUseCase = app.removeCustomImportPresetUseCase
+                    importSourceUseCase = app.importSourceUseCase,
+                    removeCustomImportPresetUseCase = app.removeCustomImportPresetUseCase,
+                    reuseLocalFamilyUseCase = app.reuseLocalFamilyUseCase
                 )
             )
             ImportPresetListScreen(
@@ -297,7 +299,8 @@ fun SleepInNavHost(
                     getImportPresetsUseCase = app.getImportPresetsUseCase,
                     readImportScriptUseCase = app.readImportScriptUseCase,
                     addCustomImportPresetUseCase = app.addCustomImportPresetUseCase,
-                    updateCustomImportPresetUseCase = app.updateCustomImportPresetUseCase
+                    updateCustomImportPresetUseCase = app.updateCustomImportPresetUseCase,
+                    reuseLocalFamilyUseCase = app.reuseLocalFamilyUseCase
                 )
             )
             ImportPresetEditorScreen(

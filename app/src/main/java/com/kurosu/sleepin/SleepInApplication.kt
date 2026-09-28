@@ -38,6 +38,8 @@ import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ParseImportSubmissionUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ReadImportScriptUseCase
 import com.kurosu.sleepin.domain.usecase.importer.RemoveCustomImportPresetUseCase
+import com.kurosu.sleepin.domain.usecase.importer.ReuseLocalFamilyUseCase
+import com.kurosu.sleepin.domain.usecase.importer.ImportSourceUseCase
 import com.kurosu.sleepin.domain.usecase.importer.UpdateCustomImportPresetUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
@@ -142,6 +144,10 @@ class SleepInApplication : Application() {
         private set
     lateinit var updateCustomImportPresetUseCase: UpdateCustomImportPresetUseCase
         private set
+    lateinit var reuseLocalFamilyUseCase: ReuseLocalFamilyUseCase
+        private set
+    lateinit var importSourceUseCase: ImportSourceUseCase
+        private set
 
     private lateinit var seedDefaultScheduleUseCase: SeedDefaultScheduleUseCase
 
@@ -174,6 +180,19 @@ class SleepInApplication : Application() {
         val importPayloadParser = RepositoryModule.provideImportPayloadParser()
         val timetableImportRepository = RepositoryModule.provideTimetableImportRepository(database)
         val importPresetIndexParser = RepositoryModule.provideImportPresetIndexParser()
+        val importSourceIndexParser = RepositoryModule.provideImportSourceIndexParser()
+        val importSourceFileStore = RepositoryModule.provideImportSourceFileStore(filesDir)
+        val remoteImportPresetStore = RepositoryModule.provideRemoteImportPresetStore(
+            dataStore = importPresetDataStore,
+            fileStore = importSourceFileStore
+        )
+        val importSourceRepository = RepositoryModule.provideImportSourceRepository(
+            remotePresets = remoteImportPresetStore,
+            sourceFileStore = importSourceFileStore,
+            sourceIndexParser = importSourceIndexParser,
+            contentResolver = contentResolver
+        )
+        val localFamilyRepository = RepositoryModule.provideLocalFamilyRepository(importSourceFileStore)
         val importPresetFileStore = RepositoryModule.provideImportPresetFileStore(filesDir)
         val customImportPresetStore = RepositoryModule.provideCustomImportPresetStore(
             dataStore = importPresetDataStore,
@@ -182,7 +201,8 @@ class SleepInApplication : Application() {
         val importPresetRepository = RepositoryModule.provideImportPresetRepository(
             assets = assets,
             parser = importPresetIndexParser,
-            customPresets = customImportPresetStore
+            customPresets = customImportPresetStore,
+            remotePresets = remoteImportPresetStore
         )
 
         getSchedulesUseCase = GetSchedulesUseCase(scheduleRepository)
@@ -243,6 +263,8 @@ class SleepInApplication : Application() {
         addCustomImportPresetUseCase = AddCustomImportPresetUseCase(importPresetRepository)
         removeCustomImportPresetUseCase = RemoveCustomImportPresetUseCase(importPresetRepository)
         updateCustomImportPresetUseCase = UpdateCustomImportPresetUseCase(importPresetRepository)
+        reuseLocalFamilyUseCase = ReuseLocalFamilyUseCase(localFamilyRepository)
+        importSourceUseCase = ImportSourceUseCase(importSourceRepository)
     }
 
     /**
