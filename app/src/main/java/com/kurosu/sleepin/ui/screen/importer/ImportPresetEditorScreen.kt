@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -242,33 +243,48 @@ fun ImportPresetEditorScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                ScriptSection(
-                    uiState = uiState,
-                    onPickFile = { pickScriptLauncher.launch(arrayOf("*/*")) },
-                    onPaste = {
-                        val pasted = clipboardManager.getText()?.text.orEmpty()
-                        if (pasted.isBlank()) {
-                            viewModel.onScriptUnavailable("剪贴板里没有文本。")
-                        } else {
-                            viewModel.onScriptLoaded(pasted, sourceLabel = "已从剪贴板粘贴")
-                        }
-                    },
-                    onClear = viewModel::clearScript
+                ScriptSourcePicker(
+                    selected = uiState.scriptSource,
+                    canReuseFamily = uiState.availableFamilyIds.isNotEmpty(),
+                    onSelect = viewModel::onScriptSourceChange
                 )
+
+                when (uiState.scriptSource) {
+                    ImportPresetScriptSource.WRITTEN -> ScriptSection(
+                        uiState = uiState,
+                        onPickFile = { pickScriptLauncher.launch(arrayOf("*/*")) },
+                        onPaste = {
+                            val pasted = clipboardManager.getText()?.text.orEmpty()
+                            if (pasted.isBlank()) {
+                                viewModel.onScriptUnavailable("剪贴板里没有文本。")
+                            } else {
+                                viewModel.onScriptLoaded(pasted, sourceLabel = "已从剪贴板粘贴")
+                            }
+                        },
+                        onClear = viewModel::clearScript
+                    )
+
+                    ImportPresetScriptSource.FAMILY -> FamilyAssemblySection(
+                        uiState = uiState,
+                        onFamilySelected = viewModel::onFamilySelected,
+                        onConfigChange = viewModel::onConfigChange,
+                        onOverrideChange = viewModel::onOverrideChange
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(
                         onClick = { viewModel.save(runNow = true) },
-                        enabled = !uiState.isSaving,
+                        enabled = !uiState.isSaving && uiState.canSave,
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("保存并试运行")
                     }
                     Button(
                         onClick = { viewModel.save(runNow = false) },
-                        enabled = !uiState.isSaving,
+                        enabled = !uiState.isSaving && uiState.canSave,
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(if (uiState.isSaving) "保存中…" else "保存")
@@ -324,6 +340,128 @@ private fun GroupPicker(
             }
         }
     }
+}
+
+/**
+ * Picks where the script comes from.
+ *
+ * Reusing a cached family is only offered once one exists: a family only ever arrives by importing a
+ * source, so on a fresh device the option would be a dead end. It stays visible but disabled, which
+ * tells the user the way exists rather than hiding it.
+ */
+@Composable
+private fun ScriptSourcePicker(
+    selected: ImportPresetScriptSource,
+    canReuseFamily: Boolean,
+    onSelect: (ImportPresetScriptSource) -> Unit
+) {
+    Text(text = "脚本来源", style = MaterialTheme.typography.titleSmall)
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(
+            selected = selected == ImportPresetScriptSource.WRITTEN,
+            onClick = { onSelect(ImportPresetScriptSource.WRITTEN) }
+        )
+        Text("自己写完整脚本")
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(
+            selected = selected == ImportPresetScriptSource.FAMILY,
+            onClick = { onSelect(ImportPresetScriptSource.FAMILY) },
+            enabled = canReuseFamily
+        )
+        Text(
+            text = "用本地缓存的族组装",
+            color = if (canReuseFamily) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+    }
+
+    if (!canReuseFamily) {
+        Text(
+            text = "本地还没有可复用的族。先在方案列表里「从链接导入源」或「从本地目录导入源」，导入过之后就可以只写与族不同的取值。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * The inputs for assembling a script from a cached family.
+ *
+ * The same pieces a source publishes per school: a family, the values that differ, and an optional
+ * override. Only the values that differ have to be written down here, which is the whole point of
+ * reusing a family.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FamilyAssemblySection(
+    uiState: ImportPresetEditorUiState,
+    onFamilySelected: (String) -> Unit,
+    onConfigChange: (String) -> Unit,
+    onOverrideChange: (String) -> Unit
+) {
+    var familyExpanded by remember { mutableStateOf(false) }
+
+    Text(text = "脚本", style = MaterialTheme.typography.titleSmall)
+
+    ExposedDropdownMenuBox(
+        expanded = familyExpanded,
+        onExpandedChange = { familyExpanded = it }
+    ) {
+        OutlinedTextField(
+            modifier = Modifier
+                .menuAnchor(type = MenuAnchorType.PrimaryNotEditable, enabled = true)
+                .fillMaxWidth()
+                .clickable { familyExpanded = true },
+            value = uiState.selectedFamilyId.orEmpty(),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("要复用的族") },
+            placeholder = { Text("选择一个族") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = familyExpanded) }
+        )
+
+        DropdownMenu(
+            expanded = familyExpanded,
+            onDismissRequest = { familyExpanded = false }
+        ) {
+            uiState.availableFamilyIds.forEach { familyId ->
+                DropdownMenuItem(
+                    text = { Text(familyId) },
+                    onClick = {
+                        onFamilySelected(familyId)
+                        familyExpanded = false
+                    }
+                )
+            }
+        }
+    }
+
+    OutlinedTextField(
+        value = uiState.configJson,
+        onValueChange = onConfigChange,
+        label = { Text("取值（JSON，可留空）") },
+        placeholder = { Text("{\"scheduleAction\":\"...\"}") },
+        supportingText = { Text("只写与族默认值不同的项；留空表示完全用族默认值") },
+        minLines = 3,
+        textStyle = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    OutlinedTextField(
+        value = uiState.overrideText,
+        onValueChange = onOverrideChange,
+        label = { Text("覆盖脚本（可选）") },
+        supportingText = { Text("只有某一处逻辑与族不同时才需要；会接在族适配器之后") },
+        minLines = 3,
+        textStyle = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 /**

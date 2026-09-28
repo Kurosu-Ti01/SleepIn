@@ -1,5 +1,6 @@
 package com.kurosu.sleepin.di
 
+import android.content.ContentResolver
 import android.content.res.AssetManager
 import com.kurosu.sleepin.data.local.SleepInDatabase
 import com.kurosu.sleepin.data.csv.CsvExporter
@@ -7,23 +8,32 @@ import com.kurosu.sleepin.data.csv.CsvImporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvExporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvImporter
 import com.kurosu.sleepin.data.importer.BundledImportPresetSource
+import com.kurosu.sleepin.data.importer.CachedFamilyRepository
 import com.kurosu.sleepin.data.importer.CustomImportPresetStore
 import com.kurosu.sleepin.data.importer.ImportPayloadParser
 import com.kurosu.sleepin.data.importer.ImportPresetFileStore
+import com.kurosu.sleepin.data.importer.ImportSourceAssembler
+import com.kurosu.sleepin.data.importer.ImportSourceFileStore
 import com.kurosu.sleepin.data.importer.ImportPresetIndexParser
 import com.kurosu.sleepin.data.importer.MutableImportPresetSource
-import com.kurosu.sleepin.data.importer.debugImportPresetSources
+import com.kurosu.sleepin.data.importer.ImportSourceIndexParser
+import com.kurosu.sleepin.data.importer.ImportedSourceImporter
+import com.kurosu.sleepin.data.importer.RemoteImportPresetStore
 import com.kurosu.sleepin.data.preferences.ImportPresetPreferenceStore
 import com.kurosu.sleepin.data.preferences.SettingsPreferenceStore
 import com.kurosu.sleepin.data.repository.CourseRepositoryImpl
+import com.kurosu.sleepin.data.importer.debugImportPresetSources
 import com.kurosu.sleepin.data.repository.ImportPresetRepositoryImpl
-import com.kurosu.sleepin.data.repository.ScheduleRepositoryImpl
+import com.kurosu.sleepin.data.repository.ImportSourceRepositoryImpl
 import com.kurosu.sleepin.data.repository.SettingsRepositoryImpl
 import com.kurosu.sleepin.data.repository.TimetableImportRepositoryImpl
 import com.kurosu.sleepin.data.repository.TimetableRepositoryImpl
 import com.kurosu.sleepin.data.update.GitHubUpdateRepositoryImpl
 import com.kurosu.sleepin.domain.repository.CourseRepository
+import com.kurosu.sleepin.data.repository.ScheduleRepositoryImpl
 import com.kurosu.sleepin.domain.repository.ImportPresetRepository
+import com.kurosu.sleepin.domain.repository.ImportSourceRepository
+import com.kurosu.sleepin.domain.repository.LocalFamilyRepository
 import com.kurosu.sleepin.domain.repository.ScheduleRepository
 import com.kurosu.sleepin.domain.repository.SettingsRepository
 import com.kurosu.sleepin.domain.repository.TimetableImportRepository
@@ -49,6 +59,55 @@ object RepositoryModule {
 
     fun provideImportPresetIndexParser(): ImportPresetIndexParser = ImportPresetIndexParser()
 
+    fun provideImportSourceIndexParser(): ImportSourceIndexParser = ImportSourceIndexParser()
+
+    fun provideImportSourceFileStore(filesDirectory: File): ImportSourceFileStore =
+        ImportSourceFileStore(File(filesDirectory, ImportSourceFileStore.DIRECTORY_NAME))
+
+    /**
+     * Provides the collection of presets that came from an imported source.
+     *
+     * Internal because it is handed to two other providers in this module and never leaves the DI object.
+     */
+    internal fun provideRemoteImportPresetStore(
+        dataStore: ImportPresetPreferenceStore,
+        fileStore: ImportSourceFileStore
+    ): RemoteImportPresetStore = RemoteImportPresetStore(dataStore, fileStore)
+
+    /**
+     * Provides the families cached by a source import, for a preset the user writes themselves.
+     *
+     * Uses the same assembler as an import: a preset built from a cached family and one imported from a
+     * source have to be assembled identically.
+     */
+    fun provideLocalFamilyRepository(
+        sourceFileStore: ImportSourceFileStore
+    ): LocalFamilyRepository = CachedFamilyRepository(
+        sourceFileStore = sourceFileStore,
+        assembler = ImportSourceAssembler()
+    )
+
+    /**
+     * Provides the importer behind both ways of importing a source.
+     *
+     * The reader (HTTPS or a directory on the device) is chosen per call, but the rules that follow are
+     * the same instance of [ImportedSourceImporter] for both.
+     */
+    internal fun provideImportSourceRepository(
+        remotePresets: RemoteImportPresetStore,
+        sourceFileStore: ImportSourceFileStore,
+        sourceIndexParser: ImportSourceIndexParser,
+        contentResolver: ContentResolver
+    ): ImportSourceRepository = ImportSourceRepositoryImpl(
+        importer = ImportedSourceImporter(
+            registry = remotePresets,
+            sourceFileStore = sourceFileStore,
+            indexParser = sourceIndexParser,
+            assembler = ImportSourceAssembler()
+        ),
+        contentResolver = contentResolver
+    )
+
     /** Provides the file store that keeps the scripts of the user's own presets. */
     fun provideImportPresetFileStore(filesDirectory: File): ImportPresetFileStore =
         ImportPresetFileStore(File(filesDirectory, ImportPresetFileStore.DIRECTORY_NAME))
@@ -68,16 +127,17 @@ object RepositoryModule {
      * Debug builds add a sample source between them ([debugImportPresetSources]); release builds add
      * nothing, because the sample and its script live in the debug source set only.
      */
-    fun provideImportPresetRepository(
+    internal fun provideImportPresetRepository(
         assets: AssetManager,
         parser: ImportPresetIndexParser,
-        customPresets: MutableImportPresetSource
+        customPresets: MutableImportPresetSource,
+        remotePresets: RemoteImportPresetStore
     ): ImportPresetRepository = ImportPresetRepositoryImpl(
         // The user's own presets take part in the merge and are also the only writable source, so they
         // appear in both roles.
         sources = listOf(BundledImportPresetSource(assets = assets, parser = parser)) +
             debugImportPresetSources() +
-            listOf(customPresets),
+            listOf(remotePresets, customPresets),
         customPresets = customPresets
     )
 

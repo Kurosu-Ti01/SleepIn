@@ -3,11 +3,16 @@ package com.kurosu.sleepin.ui.screen.importer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kurosu.sleepin.domain.model.importer.ImportLocalSourceDraft
 import com.kurosu.sleepin.domain.model.importer.ImportPreset
 import com.kurosu.sleepin.domain.model.importer.ImportPresetGroup
 import com.kurosu.sleepin.domain.model.importer.ImportPresetSourceKind
+import com.kurosu.sleepin.domain.model.importer.ImportSourceDraft
+import com.kurosu.sleepin.domain.model.importer.ImportSourceImportResult
 import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
+import com.kurosu.sleepin.domain.usecase.importer.ImportSourceUseCase
 import com.kurosu.sleepin.domain.usecase.importer.RemoveCustomImportPresetUseCase
+import com.kurosu.sleepin.domain.usecase.importer.ReuseLocalFamilyUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +47,7 @@ data class ImportPresetSchoolUi(
  */
 data class ImportPresetListUiState(
     val isLoading: Boolean = true,
+    val isImportingSource: Boolean = false,
     val query: String = "",
     val schools: List<ImportPresetSchoolUi> = emptyList(),
     val presetsBySchool: Map<String, List<ImportPresetItemUi>> = emptyMap(),
@@ -53,6 +59,13 @@ data class ImportPresetListUiState(
      * a script, the other suggests a different search.
      */
     val hasAnyPreset: Boolean = false,
+    /**
+     * Families cached on this device by an imported source.
+     *
+     * Only used to explain an otherwise empty list: a source may publish families before it has any
+     * preset, and telling the user there is nothing would then be plainly wrong.
+     */
+    val cachedFamilyCount: Int = 0,
     val message: String? = null
 ) {
     val hasVisiblePreset: Boolean get() = schools.isNotEmpty() || general.isNotEmpty()
@@ -66,7 +79,9 @@ data class ImportPresetListUiState(
  */
 class ImportPresetListViewModel(
     private val getImportPresetsUseCase: GetImportPresetsUseCase,
-    private val removeCustomImportPresetUseCase: RemoveCustomImportPresetUseCase
+    private val importSourceUseCase: ImportSourceUseCase,
+    private val removeCustomImportPresetUseCase: RemoveCustomImportPresetUseCase,
+    private val reuseLocalFamilyUseCase: ReuseLocalFamilyUseCase
 ) : ViewModel() {
 
     /**
@@ -89,6 +104,7 @@ class ImportPresetListViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             loadedPresets = getImportPresetsUseCase()
+            _uiState.update { it.copy(cachedFamilyCount = reuseLocalFamilyUseCase.availableFamilyIds().size) }
             publishSections()
         }
     }
@@ -113,6 +129,71 @@ class ImportPresetListViewModel(
     fun consumeMessage() {
         _uiState.update { it.copy(message = null) }
     }
+
+    /** Imports a source from a user-provided HTTPS index URL. */
+    fun importSource(indexUrl: String, reuseLocalFamilies: Boolean) {
+        if (_uiState.value.isImportingSource) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isImportingSource = true) }
+            publishImportResult(importSourceUseCase(ImportSourceDraft(indexUrl, reuseLocalFamilies)))
+        }
+    }
+
+    /**
+     * Imports a source from a directory the user picked on the device.
+     *
+     * @param rootUri URI text of the granted directory. The screen converts the picker result, so this
+     *   layer keeps no platform types.
+     */
+    fun importLocalSource(rootUri: String, reuseLocalFamilies: Boolean) {
+        if (_uiState.value.isImportingSource) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isImportingSource = true) }
+            publishImportResult(
+                importSourceUseCase.importFromDirectory(ImportLocalSourceDraft(rootUri, reuseLocalFamilies))
+            )
+        }
+    }
+
+    /**
+     * Reports how an import ended and, on success, re-reads the list so the new presets are visible.
+     *
+     * Both ways of importing finish here, so what the user reads does not depend on which one they used.
+     */
+    private suspend fun publishImportResult(result: ImportSourceImportResult) {
+        when (result) {
+            is ImportSourceImportResult.Imported -> {
+                loadedPresets = getImportPresetsUseCase()
+                publishSections()
+                _uiState.update { it.copy(isImportingSource = false, message = importSummary(result)) }
+            }
+
+            is ImportSourceImportResult.Rejected ->
+                _uiState.update { it.copy(isImportingSource = false, message = result.message) }
+
+            is ImportSourceImportResult.Failed ->
+                _uiState.update { it.copy(isImportingSource = false, message = result.message) }
+        }
+    }
+
+    /**
+     * What to say about a finished import.
+     *
+     * A source can publish families before it has any preset — the family repository itself is in that
+     * state — and then the list stays empty even though something useful was stored. Saying so, and where
+     * to use it, is the difference between "it worked" and "it silently did nothing".
+     */
+    private fun importSummary(result: ImportSourceImportResult.Imported): String = when {
+        result.presetCount > 0 ->
+            "已导入 ${result.presetCount} 个方案，缓存/复用 ${result.familyCount} 个族。"
+
+        result.familyCount > 0 ->
+            "该源只有族，还没有方案：已缓存 ${result.familyCount} 个族，" +
+                "在「导入自己的脚本」里选「用本地缓存的族组装」即可复用。"
+
+        else -> "该源里没有可导入的内容。"
+    }
+
     private fun publishSections() {
         val sections = ImportPresetListFilter.sections(loadedPresets, _uiState.value.query)
         _uiState.update { state ->
@@ -139,14 +220,18 @@ class ImportPresetListViewModel(
         /** Manual factory mirrors the current non-Hilt architecture used across the app. */
         fun factory(
             getImportPresetsUseCase: GetImportPresetsUseCase,
-            removeCustomImportPresetUseCase: RemoveCustomImportPresetUseCase
+            importSourceUseCase: ImportSourceUseCase,
+            removeCustomImportPresetUseCase: RemoveCustomImportPresetUseCase,
+            reuseLocalFamilyUseCase: ReuseLocalFamilyUseCase
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     @Suppress("UNCHECKED_CAST")
                     return ImportPresetListViewModel(
                         getImportPresetsUseCase = getImportPresetsUseCase,
-                        removeCustomImportPresetUseCase = removeCustomImportPresetUseCase
+                        importSourceUseCase = importSourceUseCase,
+                        removeCustomImportPresetUseCase = removeCustomImportPresetUseCase,
+                        reuseLocalFamilyUseCase = reuseLocalFamilyUseCase
                     ) as T
                 }
             }

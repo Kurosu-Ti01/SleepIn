@@ -1,6 +1,9 @@
 package com.kurosu.sleepin.ui.screen.importer
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -25,6 +29,7 @@ import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -50,6 +55,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kurosu.sleepin.ui.component.EmptyStatePlaceholder
@@ -77,6 +83,19 @@ fun ImportPresetListScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var pendingDelete by remember { mutableStateOf<ImportPresetItemUi?>(null) }
     var selectedSchoolId by remember { mutableStateOf<String?>(null) }
+    var showSourceDialog by remember { mutableStateOf(false) }
+    var sourceUrl by remember { mutableStateOf("") }
+    var reuseLocalFamilies by remember { mutableStateOf(true) }
+    var showSourceMenu by remember { mutableStateOf(false) }
+    var pendingLocalSourceUri by remember { mutableStateOf<String?>(null) }
+
+    // A directory rather than a single file: the runner and family files an index refers to sit beside
+    // it, and a single-file grant cannot reach them.
+    val pickSourceDirectory = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) pendingLocalSourceUri = uri.toString()
+    }
 
     // Runs again whenever the user comes back to this screen, so a preset added or edited in the editor
     // is in the list by the time they see it.
@@ -116,6 +135,32 @@ fun ImportPresetListScreen(
                             contentDescription = if (selectedSchoolId != null) "返回学校列表" else "返回"
                         )
                     }
+                },
+                actions = {
+                    Box {
+                        IconButton(onClick = { showSourceMenu = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "导入源")
+                        }
+                        DropdownMenu(
+                            expanded = showSourceMenu,
+                            onDismissRequest = { showSourceMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("从链接导入源") },
+                                onClick = {
+                                    showSourceMenu = false
+                                    showSourceDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("从本地目录导入源") },
+                                onClick = {
+                                    showSourceMenu = false
+                                    pickSourceDirectory.launch(null)
+                                }
+                            )
+                        }
+                    }
                 }
             )
         },
@@ -150,14 +195,26 @@ fun ImportPresetListScreen(
             )
 
             when {
-                uiState.isLoading -> Box(
+                uiState.isLoading || uiState.isImportingSource -> Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        if (uiState.isImportingSource) {
+                            Text(
+                                text = "正在导入源…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(top = 12.dp)
+                            )
+                        }
+                    }
                 }
 
-                !uiState.hasAnyPreset -> NoPresetsContent(onCreateClick = onCreateClick)
+                !uiState.hasAnyPreset -> NoPresetsContent(
+                    cachedFamilyCount = uiState.cachedFamilyCount,
+                    onCreateClick = onCreateClick
+                )
 
                 !uiState.hasVisiblePreset -> NoMatchContent(onCreateClick = onCreateClick)
 
@@ -207,6 +264,83 @@ fun ImportPresetListScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+            }
+        )
+    }
+    if (showSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!uiState.isImportingSource) showSourceDialog = false },
+            title = { Text("从链接导入方案源") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = sourceUrl,
+                        onValueChange = { sourceUrl = it },
+                        label = { Text("源索引链接") },
+                        placeholder = { Text("https://…/index.json") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = reuseLocalFamilies,
+                            onCheckedChange = { reuseLocalFamilies = it },
+                            enabled = !uiState.isImportingSource
+                        )
+                        Text("优先复用本地已缓存的族")
+                    }
+                    Text(
+                        "关闭后会使用源内族文件，并覆盖同名本地族缓存。最终脚本仍由本机生成。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = sourceUrl.isNotBlank(),
+                    onClick = {
+                        viewModel.importSource(sourceUrl, reuseLocalFamilies)
+                        showSourceDialog = false
+                    }
+                ) { Text("导入") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSourceDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    pendingLocalSourceUri?.let { rootUri ->
+        AlertDialog(
+            onDismissRequest = { pendingLocalSourceUri = null },
+            title = { Text("从本地目录导入源") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "所选目录里需要有 source-index.json，以及它引用的 runner 与族文件。",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = reuseLocalFamilies,
+                            onCheckedChange = { reuseLocalFamilies = it }
+                        )
+                        Text("优先复用本地已缓存的族")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.importLocalSource(rootUri, reuseLocalFamilies)
+                        pendingLocalSourceUri = null
+                    }
+                ) { Text("导入") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingLocalSourceUri = null }) { Text("取消") }
             }
         )
     }
@@ -390,9 +524,14 @@ private fun ImportPresetRow(
     }
 }
 
-/** Shown when the device has no preset at all, which only a fresh install can be. */
+/**
+ * Shown when the device has no preset at all, which only a fresh install can be.
+ *
+ * A source may have been imported for its families without bringing any preset along, so an empty list
+ * says what is already usable instead of just denying that anything exists.
+ */
 @Composable
-private fun NoPresetsContent(onCreateClick: () -> Unit) {
+private fun NoPresetsContent(cachedFamilyCount: Int, onCreateClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -403,7 +542,12 @@ private fun NoPresetsContent(onCreateClick: () -> Unit) {
         EmptyStatePlaceholder(
             icon = Icons.Outlined.Language,
             title = "还没有可用的导入方案",
-            subtitle = "目前还没有已验证的学校适配脚本。你可以导入自己编写的脚本。",
+            subtitle = if (cachedFamilyCount > 0) {
+                "本机已缓存 $cachedFamilyCount 个族。点右下角 ＋ 选「用本地缓存的族组装」，" +
+                    "只写与族不同的取值就能得到一份方案。"
+            } else {
+                "目前还没有已验证的学校适配脚本。你可以导入自己编写的脚本。"
+            },
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
