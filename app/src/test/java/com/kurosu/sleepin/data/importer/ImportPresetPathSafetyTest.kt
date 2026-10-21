@@ -5,11 +5,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Unit tests for the path rules a preset index must satisfy.
+ * Unit tests for the path rules every preset file reference must satisfy.
  *
- * These are tested directly rather than only through the parser so each rejection reason is pinned by
- * itself: a case that fails during JSON decoding, for instance, would pass at the parser level even if
- * the path rule it was meant to cover was removed.
+ * These are tested directly rather than only through their callers so each rejection reason is pinned
+ * by itself: a case that fails during JSON decoding, for instance, would pass at the caller level even
+ * if the path rule it was meant to cover was removed.
  */
 class ImportPresetPathSafetyTest {
 
@@ -65,26 +65,5 @@ class ImportPresetPathSafetyTest {
         // Not decodable into an escape by anything today, but a future source that normalizes paths
         // must not be able to turn an accepted index value into one.
         assertFalse(isSafeRelativePath("presets/sample-preset/%2e%2e/x.js"))
-    }
-
-    @Test
-    fun isSafeScriptPath_requiresThePathToSitInsideThePresetsOwnFolder() {
-        assertTrue(isSafeScriptPath("presets/sample-preset/script.js", "sample-preset"))
-
-        assertFalse(isSafeScriptPath("presets/other/script.js", "sample-preset"))
-        assertFalse(isSafeScriptPath("presets/sample-preset/script.js", "other"))
-    }
-
-    @Test
-    fun isSafeScriptPath_doesNotMatchAFolderThatMerelySharesThePrefix() {
-        // The trailing separator is what makes this safe: without it, preset "generic" could reach the
-        // files of "sample-preset".
-        assertFalse(isSafeScriptPath("presets/sample-preset/script.js", "generic"))
-        assertFalse(isSafeScriptPath("presets/sample-preset-extra/script.js", "sample-preset"))
-    }
-
-    @Test
-    fun isSafeScriptPath_isCaseSensitive() {
-        assertFalse(isSafeScriptPath("presets/Sample-Preset/script.js", "sample-preset"))
     }
 }

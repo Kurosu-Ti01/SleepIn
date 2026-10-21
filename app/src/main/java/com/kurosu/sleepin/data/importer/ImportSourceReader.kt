@@ -20,6 +20,12 @@ internal const val SOURCE_INDEX_FILE_NAME: String = "source-index.json"
  *
  * Failures come in two kinds: a **missing file** is reported as null so the caller can phrase something
  * the user can act on, while a **transport failure** is thrown.
+ *
+ * There is deliberately no conditional-request support here. The index is downloaded in full and the
+ * importer decides whether anything has to change, by comparing the version it carries: a validator such
+ * as an ETag would save those bytes, but a wrong one would let the app skip an update it never saw.
+ * `raw.githubusercontent.com` currently answers `If-None-Match` with 304 even after the file changed, so
+ * its validator cannot be trusted to mean "unchanged".
  */
 internal interface ImportSourceReader {
 

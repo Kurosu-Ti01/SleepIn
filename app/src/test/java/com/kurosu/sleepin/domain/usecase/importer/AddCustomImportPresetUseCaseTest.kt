@@ -176,7 +176,6 @@ internal class RecordingImportPresetRepository : ImportPresetRepository {
             initial = "S",
             startUrl = "https://portal.example.invalid",
             scriptPath = "presets/custom-abc/script.js",
-            scriptSha256 = null,
             description = "",
             maintainer = "",
             source = ImportPresetSourceKind.CUSTOM

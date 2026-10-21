@@ -34,7 +34,6 @@ internal class ImportSamplePresetSource : ImportPresetSource {
         // the address bar stays available exactly as it is for a preset without a login page.
         startUrl = null,
         scriptPath = scriptPathFor(SAMPLE_PRESET_ID),
-        scriptSha256 = null,
         description = "不访问任何网站，直接产出一份样例课表，用于测试导入全流程。",
         maintainer = "SleepIn",
         source = ImportPresetSourceKind.DEBUG

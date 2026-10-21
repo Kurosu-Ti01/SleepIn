@@ -39,6 +39,8 @@ data class ImportPresetSchoolUi(
     val id: String,
     val name: String,
     val code: String?,
+    /** Letter this school is filed under, used for the list dividers and the jump bar. */
+    val initial: Char,
     val scriptCount: Int
 )
 
@@ -171,6 +173,19 @@ class ImportPresetListViewModel(
             is ImportSourceImportResult.Rejected ->
                 _uiState.update { it.copy(isImportingSource = false, message = result.message) }
 
+            is ImportSourceImportResult.Unchanged -> {
+                // Nothing was downloaded or written, but the list is re-read anyway so it reflects any
+                // change made elsewhere while the dialog was open.
+                loadedPresets = getImportPresetsUseCase()
+                publishSections()
+                _uiState.update {
+                    it.copy(
+                        isImportingSource = false,
+                        message = "方案源已是最新（索引版本 ${result.indexVersion}），没有变化。"
+                    )
+                }
+            }
+
             is ImportSourceImportResult.Failed ->
                 _uiState.update { it.copy(isImportingSource = false, message = result.message) }
         }
@@ -204,6 +219,7 @@ class ImportPresetListViewModel(
                         id = section.id,
                         name = section.name,
                         code = section.code,
+                        initial = section.initial,
                         scriptCount = section.presets.size
                     )
                 },

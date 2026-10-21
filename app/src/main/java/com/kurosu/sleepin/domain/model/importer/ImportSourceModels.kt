@@ -68,9 +68,42 @@ sealed interface ImportSourceImportResult {
         val familyCount: Int
     ) : ImportSourceImportResult
 
+    /**
+     * The source has not changed since it was last imported, so nothing was downloaded or written.
+     *
+     * This is a **success**, not a skip: the presets on the device are already the current release.
+     * [indexVersion] is what the version check compared.
+     */
+    data class Unchanged(val indexVersion: Int) : ImportSourceImportResult
+
     /** The source or the user's input cannot be used as given; [message] says what to fix. */
     data class Rejected(val message: String) : ImportSourceImportResult
 
     /** The source looked usable but the work did not finish; [message] is user-facing. */
     data class Failed(val message: String) : ImportSourceImportResult
 }
+
+/**
+ * A source the device has already imported, as the settings screen needs to show it.
+ *
+ * @param sourceKey the link or `local:` identifier it was imported from
+ * @param indexVersion the version currently registered, useful to tell two copies apart
+ * @param presetCount how many presets it contributes
+ * @param displayName name the user gave it, or null to fall back to something derived from the address
+ */
+data class RegisteredImportSource(
+    val sourceKey: String,
+    val indexVersion: Int,
+    val presetCount: Int,
+    val displayName: String? = null
+) {
+    /** Whether this source was a directory on the device rather than a link. */
+    val isLocal: Boolean get() = sourceKey.startsWith(LOCAL_SOURCE_KEY_PREFIX)
+}
+
+/**
+ * Prefix of the key a directory source is registered under.
+ *
+ * A directory identifier and a link can be the same text, so the prefix is what keeps the two apart.
+ */
+const val LOCAL_SOURCE_KEY_PREFIX: String = "local:"

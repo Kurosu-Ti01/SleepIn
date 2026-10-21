@@ -23,8 +23,47 @@ data class ImportPresetSchoolSection(
     val name: String,
     val code: String?,
     val aliases: List<String>,
+    /** Letter this school is filed under; see [schoolInitialOf]. */
+    val initial: Char,
     val presets: List<ImportPreset>
 )
+
+/**
+ * Letter used for schools that cannot be filed under a letter at all.
+ *
+ * A user-created school with a name written in a script the app cannot derive an initial from lands
+ * here. Sorting them last is deliberate: they are the exception, and they should not push the readable
+ * letters down the list.
+ */
+internal const val UNSORTED_SCHOOL_INITIAL: Char = '#'
+
+/**
+ * The letter [sectionName] is filed under.
+ *
+ * The presets are asked first, because a source files each of them under one letter: in the community
+ * registry that letter is the pinyin initial of the school name, which is precisely what an alphabetical
+ * index needs and precisely what the app cannot compute from the name on its own — deriving it would
+ * mean shipping a pinyin table.
+ *
+ * A school the user created has no such letter, so its own name is used when it is written in a script
+ * the app can sort, and [UNSORTED_SCHOOL_INITIAL] otherwise.
+ */
+internal fun schoolInitialOf(sectionName: String, presets: List<ImportPreset>): Char {
+    presets.forEach { preset ->
+        val letter = preset.initial.trim().firstOrNull()
+        if (letter != null && letter.isAsciiLetter()) return letter.uppercaseChar()
+    }
+
+    val first = sectionName.trim().firstOrNull()
+    if (first != null && first.isAsciiLetter()) return first.uppercaseChar()
+    return UNSORTED_SCHOOL_INITIAL
+}
+
+/** Sort key that keeps A–Z in order and pushes [UNSORTED_SCHOOL_INITIAL] to the end. */
+private fun initialSortKey(initial: Char): Int =
+    if (initial == UNSORTED_SCHOOL_INITIAL) Int.MAX_VALUE else initial.code
+
+private fun Char.isAsciiLetter(): Boolean = this in 'a'..'z' || this in 'A'..'Z'
 
 /**
  * Filtering and school grouping for the preset picker.
@@ -45,16 +84,24 @@ internal object ImportPresetListFilter {
             .groupBy { preset -> preset.schoolId!! }
             .mapNotNull { (id, schoolPresets) ->
                 val first = schoolPresets.first()
+                val name = first.schoolName ?: first.name
                 val section = ImportPresetSchoolSection(
                     id = id,
-                    name = first.schoolName ?: first.name,
+                    name = name,
                     code = first.schoolCode,
                     aliases = first.schoolAliases,
+                    initial = schoolInitialOf(name, schoolPresets),
                     presets = schoolPresets
                 )
                 if (matchesSchool(section, query)) section else null
             }
-            .sortedWith(compareBy({ section -> section.name }, { section -> section.id }))
+            .sortedWith(
+                compareBy(
+                    { section -> initialSortKey(section.initial) },
+                    { section -> section.name },
+                    { section -> section.id }
+                )
+            )
 
         return ImportPresetSections(
             schools = schoolGroups,

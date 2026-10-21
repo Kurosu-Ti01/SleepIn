@@ -1,5 +1,7 @@
 package com.kurosu.sleepin.domain.model
 
+import com.kurosu.sleepin.domain.model.importer.DEFAULT_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS
+
 /**
  * User-selectable app theme policy.
  *
@@ -37,6 +39,25 @@ data class AppSettings(
     val latestReleasePageUrl: String = "",
     val dismissedUpdateVersion: String = "",
     val lastUpdateCheckError: String = "",
-    val lastUpdateCheckAtMillis: Long = 0L
+    val lastUpdateCheckAtMillis: Long = 0L,
+    /**
+     * Whether the built-in preset source is refreshed in the background.
+     *
+     * On by default: the app ships no presets of its own, so without this a fresh install shows an
+     * empty list until the user goes looking for a source. It stays a setting because the refresh is
+     * the only thing in the app that talks to a server the user did not ask for.
+     */
+    val importSourceAutoRefreshEnabled: Boolean = true,
+    /** How often every preset source is refreshed, in days. */
+    val importSourceRefreshIntervalDays: Int = DEFAULT_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS,
+    /**
+     * When the built-in source was last refreshed successfully.
+     *
+     * A failed refresh leaves this alone on purpose, so the next attempt happens on the next launch
+     * instead of after a whole interval.
+     */
+    val importSourceLastRefreshAtMillis: Long = 0L,
+    /** Message of the last failed refresh; blank when the last attempt succeeded. */
+    val importSourceLastRefreshError: String = ""
 )
 

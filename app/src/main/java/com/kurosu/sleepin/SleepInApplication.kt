@@ -33,12 +33,17 @@ import com.kurosu.sleepin.domain.usecase.csv.ExportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.csv.ImportCsvUseCase
 import com.kurosu.sleepin.domain.usecase.importer.AddCustomImportPresetUseCase
 import com.kurosu.sleepin.domain.usecase.importer.BuildImportPreviewUseCase
+import com.kurosu.sleepin.domain.usecase.importer.ChangeImportSourceUrlUseCase
 import com.kurosu.sleepin.domain.usecase.importer.CommitImportUseCase
 import com.kurosu.sleepin.domain.usecase.importer.GetImportPresetsUseCase
+import com.kurosu.sleepin.domain.usecase.importer.GetRegisteredImportSourcesUseCase
+import com.kurosu.sleepin.domain.usecase.importer.ForgetImportSourceUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ParseImportSubmissionUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ReadImportScriptUseCase
 import com.kurosu.sleepin.domain.usecase.importer.RemoveCustomImportPresetUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ReuseLocalFamilyUseCase
+import com.kurosu.sleepin.domain.usecase.importer.RefreshImportSourcesUseCase
+import com.kurosu.sleepin.domain.usecase.importer.RenameImportSourceUseCase
 import com.kurosu.sleepin.domain.usecase.importer.ImportSourceUseCase
 import com.kurosu.sleepin.domain.usecase.importer.UpdateCustomImportPresetUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
@@ -47,6 +52,7 @@ import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
 import com.kurosu.sleepin.domain.usecase.settings.PerformUpdateCheckUseCase
 import com.kurosu.sleepin.domain.usecase.settings.UpdateSettingsUseCase
 import com.kurosu.sleepin.reminder.CourseReminderScheduler
+import com.kurosu.sleepin.importer.ImportSourceRefreshScheduler
 import com.kurosu.sleepin.update.UpdateCheckScheduler
 import com.kurosu.sleepin.widget.TodayWidget
 import com.kurosu.sleepin.widget.WidgetRefreshScheduler
@@ -148,6 +154,16 @@ class SleepInApplication : Application() {
         private set
     lateinit var importSourceUseCase: ImportSourceUseCase
         private set
+    lateinit var refreshImportSourcesUseCase: RefreshImportSourcesUseCase
+        private set
+    lateinit var renameImportSourceUseCase: RenameImportSourceUseCase
+        private set
+    lateinit var changeImportSourceUrlUseCase: ChangeImportSourceUrlUseCase
+        private set
+    lateinit var getRegisteredImportSourcesUseCase: GetRegisteredImportSourcesUseCase
+        private set
+    lateinit var forgetImportSourceUseCase: ForgetImportSourceUseCase
+        private set
 
     private lateinit var seedDefaultScheduleUseCase: SeedDefaultScheduleUseCase
 
@@ -160,6 +176,7 @@ class SleepInApplication : Application() {
         seedDefaultSchedule()
         scheduleWidgetRefreshPipeline()
         observeAutoUpdateScheduling()
+        observeImportSourceRefreshScheduling()
         observeClassReminderScheduling()
         registerWidgetRefreshOnDatabaseChanges()
     }
@@ -179,7 +196,6 @@ class SleepInApplication : Application() {
         val scheduleCsvExporter = RepositoryModule.provideScheduleCsvExporter()
         val importPayloadParser = RepositoryModule.provideImportPayloadParser()
         val timetableImportRepository = RepositoryModule.provideTimetableImportRepository(database)
-        val importPresetIndexParser = RepositoryModule.provideImportPresetIndexParser()
         val importSourceIndexParser = RepositoryModule.provideImportSourceIndexParser()
         val importSourceFileStore = RepositoryModule.provideImportSourceFileStore(filesDir)
         val remoteImportPresetStore = RepositoryModule.provideRemoteImportPresetStore(
@@ -199,8 +215,6 @@ class SleepInApplication : Application() {
             fileStore = importPresetFileStore
         )
         val importPresetRepository = RepositoryModule.provideImportPresetRepository(
-            assets = assets,
-            parser = importPresetIndexParser,
             customPresets = customImportPresetStore,
             remotePresets = remoteImportPresetStore
         )
@@ -265,6 +279,14 @@ class SleepInApplication : Application() {
         updateCustomImportPresetUseCase = UpdateCustomImportPresetUseCase(importPresetRepository)
         reuseLocalFamilyUseCase = ReuseLocalFamilyUseCase(localFamilyRepository)
         importSourceUseCase = ImportSourceUseCase(importSourceRepository)
+        changeImportSourceUrlUseCase = ChangeImportSourceUrlUseCase(importSourceRepository)
+        getRegisteredImportSourcesUseCase = GetRegisteredImportSourcesUseCase(importSourceRepository)
+        forgetImportSourceUseCase = ForgetImportSourceUseCase(importSourceRepository)
+        refreshImportSourcesUseCase = RefreshImportSourcesUseCase(
+            settingsRepository = settingsRepository,
+            importSourceRepository = importSourceRepository
+        )
+        renameImportSourceUseCase = RenameImportSourceUseCase(importSourceRepository)
     }
 
     /**
@@ -301,6 +323,34 @@ class SleepInApplication : Application() {
                     UpdateCheckScheduler.syncPeriodic(this@SleepInApplication, enabled)
                     if (enabled) {
                         UpdateCheckScheduler.requestImmediateCheck(this@SleepInApplication, force = false)
+                    }
+                }
+        }
+    }
+
+    /**
+     * Keeps the built-in preset source fresh: one attempt per launch, then on the configured schedule.
+     *
+     * The launch attempt is what makes a fresh install usable — the app ships no presets, so an empty
+     * list with nothing to explain it would be the first thing a new user sees. The interval is part of
+     * the observed key so that changing it re-registers the periodic work instead of leaving the old
+     * cadence in place.
+     */
+    private fun observeImportSourceRefreshScheduling() {
+        appScope.launch {
+            observeSettingsUseCase()
+                .map { settings ->
+                    settings.importSourceAutoRefreshEnabled to settings.importSourceRefreshIntervalDays
+                }
+                .distinctUntilChanged()
+                .collect { (enabled, intervalDays) ->
+                    ImportSourceRefreshScheduler.syncPeriodic(
+                        context = this@SleepInApplication,
+                        enabled = enabled,
+                        intervalDays = intervalDays
+                    )
+                    if (enabled) {
+                        ImportSourceRefreshScheduler.requestLaunchRefresh(this@SleepInApplication)
                     }
                 }
         }

@@ -4,16 +4,14 @@ package com.kurosu.sleepin.domain.model.importer
  * Where an import preset came from.
  *
  * This is an identity, not a priority: merge order is decided by the order the sources are handed to
- * the repository, so a caller can put a downloaded source after a bundled one and have it win.
+ * the repository, so a caller can put an imported source after the user's own and have it win. The app
+ * packages no presets itself, so every preset the user sees was either imported or written by them.
  */
 enum class ImportPresetSourceKind {
-    /** Packaged inside the APK. */
-    BUNDLED,
-
-    /** Added by the user from a script file on the device. */
+    /** Added by the user from a script file on the device, or assembled in the editor. */
     CUSTOM,
 
-    /** Downloaded from the configured preset source. */
+    /** Imported from a source the user pointed at: a link, or a directory on the device. */
     REMOTE,
 
     /**
@@ -21,8 +19,8 @@ enum class ImportPresetSourceKind {
      *
      * A preset of this kind can only appear when something supplies one: the debug build registers
      * a source that hands out a fixed sample, and release builds register no such source. Keeping this
-     * a separate kind (rather than reusing [BUNDLED]) is what lets a preset be read back from the
-     * source that owns it, and keeps the sample from ever colliding with a real preset.
+     * a separate kind is what lets a preset be read back from the source that owns it, and keeps the
+     * sample from ever colliding with a real preset.
      */
     DEBUG
 }
@@ -47,8 +45,8 @@ enum class ImportPresetGroup {
 /**
  * One import preset: the metadata describing an import script and where to start reading.
  *
- * This is the runtime shape shared by every source. The wire format (`index.json`) carries the same
- * fields; [source] is added while parsing so callers can tell a bundled preset from a user's own.
+ * This is the runtime shape shared by every source. The stored form carries the same fields;
+ * [source] is filled in by the source that produced the preset, so callers can tell them apart.
  */
 data class ImportPreset(
     /** Stable identifier, also the name of the folder holding the script. */
@@ -64,14 +62,6 @@ data class ImportPreset(
     val startUrl: String?,
     /** Path of the script relative to the source root, always inside `presets/<id>/`. */
     val scriptPath: String,
-    /**
-     * Lowercase hex SHA-256 of the script file.
-     *
-     * Optional for bundled presets, which ship inside the APK and cannot change underneath the user.
-     * Required for remotely downloaded ones, where it is the only thing that makes the index and the
-     * script it points at a single trustworthy unit.
-     */
-    val scriptSha256: String?,
     /** Shown in the preset list and on the import screen; carries any per-school usage hint. */
     val description: String,
     val maintainer: String,
@@ -85,29 +75,3 @@ data class ImportPreset(
     /** Other searchable names for the school. */
     val schoolAliases: List<String> = emptyList()
 )
-
-/**
- * Parsed contents of an `index.json`.
- */
-data class ImportPresetIndex(
-    val schemaVersion: Int,
-    val indexVersion: Int,
-    val presets: List<ImportPreset>,
-    val schools: List<ImportPresetSchool> = emptyList()
-)
-
-/**
- * Outcome of decoding an index file.
- */
-sealed interface ImportPresetIndexParseResult {
-    data class Parsed(val index: ImportPresetIndex) : ImportPresetIndexParseResult
-
-    /**
-     * The index is unusable.
-     *
-     * [message] is diagnostic text rather than something to show the user: a broken index means a
-     * packaging or publication mistake, and the app degrades to the sources it can read instead of
-     * interrupting the user with an error they cannot act on.
-     */
-    data class Invalid(val message: String) : ImportPresetIndexParseResult
-}

@@ -1,9 +1,11 @@
 package com.kurosu.sleepin.ui.screen.importer
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +19,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -52,13 +59,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kurosu.sleepin.ui.component.EmptyStatePlaceholder
+import kotlinx.coroutines.launch
 
 /**
  * Lets the user pick an import preset, and manage the ones they added themselves.
@@ -81,6 +92,7 @@ fun ImportPresetListScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
     var pendingDelete by remember { mutableStateOf<ImportPresetItemUi?>(null) }
     var selectedSchoolId by remember { mutableStateOf<String?>(null) }
     var showSourceDialog by remember { mutableStateOf(false) }
@@ -94,7 +106,17 @@ fun ImportPresetListScreen(
     val pickSourceDirectory = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
-        if (uri != null) pendingLocalSourceUri = uri.toString()
+        if (uri != null) {
+            // Keep the grant: the same directory is read again on every later refresh, and a grant that was
+            // never taken away only lives until this process dies.
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            pendingLocalSourceUri = uri.toString()
+        }
     }
 
     // Runs again whenever the user comes back to this screen, so a preset added or edited in the editor
@@ -277,7 +299,7 @@ fun ImportPresetListScreen(
                         value = sourceUrl,
                         onValueChange = { sourceUrl = it },
                         label = { Text("源索引链接") },
-                        placeholder = { Text("https://…/index.json") },
+                        placeholder = { Text("https://…/source-index.json") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         modifier = Modifier.fillMaxWidth()
@@ -352,56 +374,138 @@ private fun SchoolDirectory(
     onSchoolClick: (String) -> Unit,
     onGeneralPresetClick: (String) -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 8.dp,
-            bottom = 96.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        if (uiState.schools.isNotEmpty()) {
-            item(key = "header-schools") {
-                SectionHeader(title = "学校", subtitle = "选择学校后查看其导入方案")
-            }
-            items(uiState.schools, key = { school -> "school-${school.id}" }) { school ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSchoolClick(school.id) },
-                    shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Outlined.School, contentDescription = null)
-                        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                            Text(school.name, style = MaterialTheme.typography.titleMedium)
-                            val code = school.code?.let { " · $it" }.orEmpty()
-                            Text(
-                                "${school.scriptCount} 个导入方案$code",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+    val rows = remember(uiState.schools, uiState.general) {
+        directoryRows(schools = uiState.schools, general = uiState.general)
+    }
+    val letterAnchors = remember(rows) { letterAnchorsOf(rows) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 8.dp,
+                bottom = 96.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            itemsIndexed(
+                items = rows,
+                key = { index, row -> directoryRowKey(row, index) }
+            ) { _, row ->
+                when (row) {
+                    is ImportPresetDirectoryRow.Header ->
+                        SectionHeader(title = row.title, subtitle = row.subtitle)
+
+                    is ImportPresetDirectoryRow.Letter -> LetterHeader(initial = row.initial)
+
+                    is ImportPresetDirectoryRow.School -> SchoolCard(
+                        school = row.item,
+                        onClick = { onSchoolClick(row.item.id) }
+                    )
+
+                    is ImportPresetDirectoryRow.Preset -> ImportPresetRow(
+                        item = row.item,
+                        onClick = { onGeneralPresetClick(row.item.id) },
+                        onEditClick = null,
+                        onDeleteRequest = null
+                    )
                 }
             }
         }
-        if (uiState.general.isNotEmpty()) {
-            item(key = "header-general") { SectionHeader(title = "通用工具", subtitle = null) }
-            items(uiState.general, key = { item -> item.id }) { item ->
-                ImportPresetRow(
-                    item = item,
-                    onClick = { onGeneralPresetClick(item.id) },
-                    onEditClick = null,
-                    onDeleteRequest = null
+
+        // Only worth showing when the list actually spans more than one letter.
+        if (letterAnchors.size > 1) {
+            LetterJumpBar(
+                anchors = letterAnchors,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 2.dp),
+                onLetterSelected = { index -> scope.launch { listState.animateScrollToItem(index) } }
+            )
+        }
+    }
+}
+
+private fun directoryRowKey(row: ImportPresetDirectoryRow, index: Int): String = when (row) {
+    is ImportPresetDirectoryRow.Header -> "header-$index"
+    is ImportPresetDirectoryRow.Letter -> "letter-${row.initial}"
+    is ImportPresetDirectoryRow.School -> "school-${row.item.id}"
+    is ImportPresetDirectoryRow.Preset -> "preset-${row.item.id}"
+}
+
+@Composable
+private fun SchoolCard(school: ImportPresetSchoolUi, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.School, contentDescription = null)
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(school.name, style = MaterialTheme.typography.titleMedium)
+                val code = school.code?.let { " · $it" }.orEmpty()
+                Text(
+                    "${school.scriptCount} 个导入方案$code",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+/** The letter a run of schools starts under. */
+@Composable
+private fun LetterHeader(initial: Char) {
+    Text(
+        text = initial.toString(),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 2.dp, top = 6.dp)
+    )
+}
+
+/**
+ * The A–Z bar on the right edge.
+ *
+ * Scrollable on purpose: a long list can produce enough letters that the bar would not otherwise fit on a
+ * short screen, and a bar that silently clips its last letters is worse than one that scrolls.
+ */
+@Composable
+private fun LetterJumpBar(
+    anchors: List<Pair<Char, Int>>,
+    modifier: Modifier = Modifier,
+    onLetterSelected: (Int) -> Unit
+) {
+    Column(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 3.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        anchors.forEach { (letter, rowIndex) ->
+            Text(
+                text = letter.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { onLetterSelected(rowIndex) }
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
+            )
         }
     }
 }
@@ -449,7 +553,7 @@ private fun SectionHeader(title: String, subtitle: String?) {
  * One preset.
  *
  * Tapping the row starts an import with that preset; the menu appears only for presets the user added,
- * because the bundled ones are part of the APK and cannot be changed from here.
+ * because those are the only ones they can change.
  */
 @Composable
 private fun ImportPresetRow(
@@ -546,7 +650,8 @@ private fun NoPresetsContent(cachedFamilyCount: Int, onCreateClick: () -> Unit) 
                 "本机已缓存 $cachedFamilyCount 个族。点右下角 ＋ 选「用本地缓存的族组装」，" +
                     "只写与族不同的取值就能得到一份方案。"
             } else {
-                "目前还没有已验证的学校适配脚本。你可以导入自己编写的脚本。"
+                "应用不内置方案，会从社区方案源自动获取学校列表。稍等片刻，或到" +
+                    "「设置 → 教务导入源」点「立即更新」；也可以导入自己编写的脚本。"
             },
             modifier = Modifier.fillMaxWidth()
         )

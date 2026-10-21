@@ -17,6 +17,8 @@ import com.kurosu.sleepin.ui.screen.importer.ImportPresetEditorScreen
 import com.kurosu.sleepin.ui.screen.importer.ImportPresetEditorViewModel
 import com.kurosu.sleepin.ui.screen.importer.ImportPresetListScreen
 import com.kurosu.sleepin.ui.screen.importer.ImportPresetListViewModel
+import com.kurosu.sleepin.ui.screen.importer.ImportSourceListScreen
+import com.kurosu.sleepin.ui.screen.importer.ImportSourceListViewModel
 import com.kurosu.sleepin.ui.screen.importer.web.ImportWebScreen
 import com.kurosu.sleepin.ui.screen.importer.web.ImportWebViewModel
 import com.kurosu.sleepin.ui.screen.course.CourseEditorScreen
@@ -379,7 +381,8 @@ fun SleepInNavHost(
                     updateSettingsUseCase = app.updateSettingsUseCase,
                     exportSettingsBackupUseCase = app.exportSettingsBackupUseCase,
                     importSettingsBackupUseCase = app.importSettingsBackupUseCase,
-                    performUpdateCheckUseCase = app.performUpdateCheckUseCase
+                    performUpdateCheckUseCase = app.performUpdateCheckUseCase,
+                    refreshImportSourcesUseCase = app.refreshImportSourcesUseCase
                 )
             )
             SettingsScreen(
@@ -387,6 +390,25 @@ fun SleepInNavHost(
                 onNavigateToImportPresets = {
                     navController.navigate(Screen.ImportPresetList.createRoute())
                 },
+                onNavigateToImportSources = {
+                    navController.navigate(Screen.ImportSourceList.route)
+                },
+                viewModel = vm
+            )
+        }
+
+        composable(Screen.ImportSourceList.route) {
+            val vm: ImportSourceListViewModel = viewModel(
+                factory = ImportSourceListViewModel.factory(
+                    importSourceUseCase = app.importSourceUseCase,
+                    getRegisteredImportSourcesUseCase = app.getRegisteredImportSourcesUseCase,
+                    changeImportSourceUrlUseCase = app.changeImportSourceUrlUseCase,
+                    forgetImportSourceUseCase = app.forgetImportSourceUseCase,
+                    renameImportSourceUseCase = app.renameImportSourceUseCase
+                )
+            )
+            ImportSourceListScreen(
+                onBackClick = { navController.popBackStack() },
                 viewModel = vm
             )
         }

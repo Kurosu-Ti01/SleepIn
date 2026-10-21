@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.kurosu.sleepin.domain.model.AppSettings
 import com.kurosu.sleepin.domain.model.ThemeMode
+import com.kurosu.sleepin.domain.model.importer.DEFAULT_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -32,6 +33,10 @@ class SettingsRepositoryImplTest {
         assertEquals("", settings.latestRemoteVersion)
         assertEquals("", settings.latestReleaseNotes)
         assertEquals("", settings.dismissedUpdateVersion)
+        assertTrue(settings.importSourceAutoRefreshEnabled)
+        assertEquals(DEFAULT_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS, settings.importSourceRefreshIntervalDays)
+        assertEquals(0L, settings.importSourceLastRefreshAtMillis)
+        assertEquals("", settings.importSourceLastRefreshError)
     }
 
     @Test
@@ -53,7 +58,11 @@ class SettingsRepositoryImplTest {
             latestReleasePageUrl = "https://github.com/Kurosu-Ti01/SleepIn/releases/tag/v0.2.0",
             dismissedUpdateVersion = "",
             lastUpdateCheckError = "",
-            lastUpdateCheckAtMillis = 123456789L
+            lastUpdateCheckAtMillis = 123456789L,
+            importSourceAutoRefreshEnabled = false,
+            importSourceRefreshIntervalDays = 14,
+            importSourceLastRefreshAtMillis = 987654321L,
+            importSourceLastRefreshError = "源服务器返回 HTTP 503"
         )
 
         repository.updateSettings(updated)
