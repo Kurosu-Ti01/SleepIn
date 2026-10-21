@@ -19,11 +19,11 @@ class ImportPresetListFilterTest {
         val schoolId = customSchoolIdForName("示例大学")
         val sections = ImportPresetListFilter.sections(
             presets = listOf(
-                preset(id = "bundled-a", name = "本科系统", source = ImportPresetSourceKind.BUNDLED,
+                preset(id = "imported-a", name = "本科系统", source = ImportPresetSourceKind.REMOTE,
                     schoolId = schoolId, schoolName = "示例大学"),
                 preset(id = "custom-a", name = "研究生系统", source = ImportPresetSourceKind.CUSTOM,
                     schoolId = schoolId, schoolName = "示例大学"),
-                preset(id = "remote-a", name = "新门户", source = ImportPresetSourceKind.REMOTE,
+                preset(id = "imported-b", name = "新门户", source = ImportPresetSourceKind.REMOTE,
                     schoolId = schoolId, schoolName = "示例大学")
             ),
             query = ""
@@ -31,7 +31,7 @@ class ImportPresetListFilterTest {
 
         assertEquals(1, sections.schools.size)
         assertEquals("示例大学", sections.schools.single().name)
-        assertEquals(listOf("bundled-a", "custom-a", "remote-a"), sections.schools.single().presets.map { it.id })
+        assertEquals(listOf("imported-a", "custom-a", "imported-b"), sections.schools.single().presets.map { it.id })
     }
 
     @Test
@@ -128,13 +128,75 @@ class ImportPresetListFilterTest {
         assertTrue(sections.general.isEmpty())
     }
 
+    @Test
+    fun sections_filesSchoolsUnderTheLetterTheirPresetsDeclare() {
+        // The community registry files 北京大学 under "B" — its pinyin initial, which the app cannot
+        // derive from the name itself without shipping a pinyin table.
+        val sections = ImportPresetListFilter.sections(
+            presets = listOf(
+                preset(
+                    id = "pku-undergraduate",
+                    name = "北京大学 · 本科教务",
+                    initial = "B",
+                    schoolId = "pku",
+                    schoolName = "北京大学"
+                )
+            ),
+            query = ""
+        )
+
+        assertEquals('B', sections.schools.single().initial)
+    }
+
+    @Test
+    fun sections_ordersSchoolsByLetter_andPutsUnsortableOnesLast() {
+        val sections = ImportPresetListFilter.sections(
+            presets = listOf(
+                preset(id = "cqu", name = "重庆大学", initial = "C", schoolId = "cqu", schoolName = "重庆大学"),
+                preset(id = "mine", name = "我的学校", initial = "1", schoolId = "mine", schoolName = "我的学校"),
+                preset(id = "pku", name = "北京大学", initial = "B", schoolId = "pku", schoolName = "北京大学"),
+                preset(id = "ahu", name = "安徽大学", initial = "A", schoolId = "ahu", schoolName = "安徽大学")
+            ),
+            query = ""
+        )
+
+        assertEquals(
+            listOf('A', 'B', 'C', UNSORTED_SCHOOL_INITIAL),
+            sections.schools.map { section -> section.initial }
+        )
+    }
+
+    @Test
+    fun schoolInitialOf_prefersTheLetterTheSourceFiledTheSchoolUnder() {
+        // The name starts with a character the app cannot sort, but the source knows the answer.
+        assertEquals('B', schoolInitialOf("北京大学", listOf(preset(id = "x", initial = "B"))))
+    }
+
+    @Test
+    fun schoolInitialOf_fallsBackToTheNameOfALatinSchool() {
+        assertEquals('E', schoolInitialOf("Example University", emptyList()))
+        assertEquals('E', schoolInitialOf("example university", emptyList()))
+    }
+
+    @Test
+    fun schoolInitialOf_givesUpOnANameItCannotSort() {
+        // A school the user typed in Chinese has no letter available anywhere; filing it under an
+        // arbitrary letter would be worse than saying it is unsorted.
+        assertEquals(UNSORTED_SCHOOL_INITIAL, schoolInitialOf("我的学校", emptyList()))
+        assertEquals(UNSORTED_SCHOOL_INITIAL, schoolInitialOf("   ", emptyList()))
+        assertEquals(
+            UNSORTED_SCHOOL_INITIAL,
+            schoolInitialOf("我的学校", listOf(preset(id = "x", initial = "1")))
+        )
+    }
+
     private fun preset(
         id: String,
         name: String = id,
         group: ImportPresetGroup = ImportPresetGroup.GENERAL,
         initial: String = "A",
         description: String = "",
-        source: ImportPresetSourceKind = ImportPresetSourceKind.BUNDLED,
+        source: ImportPresetSourceKind = ImportPresetSourceKind.REMOTE,
         schoolId: String? = null,
         schoolName: String? = null,
         schoolCode: String? = null,
@@ -146,7 +208,6 @@ class ImportPresetListFilterTest {
         initial = initial,
         startUrl = "https://portal.example.invalid",
         scriptPath = "presets/$id/script.js",
-        scriptSha256 = null,
         description = description,
         maintainer = "SleepIn",
         source = source,

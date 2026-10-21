@@ -49,6 +49,9 @@ import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material.icons.outlined.Widgets
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -110,6 +113,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     onBackClick: () -> Unit,
     onNavigateToImportPresets: () -> Unit,
+    onNavigateToImportSources: () -> Unit,
     viewModel: SettingsViewModel
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -401,10 +405,88 @@ fun SettingsScreen(
                 )
             }
 
+            SettingsSectionCard(title = "教务导入") {
+                SettingsInfoTextRow(
+                    leadingIcon = Icons.Outlined.Info,
+                    text = "从本地或远程方案源拉取学校 SleepIn 导入方案",
+                    textStyle = MaterialTheme.typography.bodySmall
+                )
+                SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Language,
+                    title = "方案源",
+                    valueText = "编辑",
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    onClick = onNavigateToImportSources
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsSwitchRow(
+                    leadingIcon = Icons.Outlined.Update,
+                    title = "自动更新方案源",
+                    checked = uiState.settings.importSourceAutoRefreshEnabled,
+                    onCheckedChange = viewModel::setImportSourceAutoRefreshEnabled
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsValueRow(
+                    leadingIcon = Icons.Outlined.Schedule,
+                    title = "更新周期",
+                    valueText = importSourceIntervalLabel(uiState.settings.importSourceRefreshIntervalDays)
+                )
+                // Same chip-row pattern as the reminder lead time, so the screen stays consistent.
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IMPORT_SOURCE_INTERVAL_CHOICES.forEach { days ->
+                        FilterChip(
+                            selected = uiState.settings.importSourceRefreshIntervalDays == days,
+                            onClick = { viewModel.setImportSourceRefreshIntervalDays(days) },
+                            enabled = uiState.settings.importSourceAutoRefreshEnabled,
+                            label = { Text(importSourceIntervalLabel(days)) }
+                        )
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsValueRow(
+                    leadingIcon = Icons.Outlined.Update,
+                    title = "上次更新",
+                    valueText = formatImportSourceRefreshTime(uiState.settings.importSourceLastRefreshAtMillis)
+                )
+                val importSourceError = uiState.settings.importSourceLastRefreshError
+                if (importSourceError.isNotBlank()) {
+                    SettingsCopyableMessageRow(
+                        leadingIcon = Icons.Outlined.Info,
+                        title = "错误详情",
+                        valueText = importSourceError,
+                        onCopyClick = {
+                            clipboardManager.setText(AnnotatedString(importSourceError))
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("已复制方案源报错信息")
+                            }
+                        }
+                    )
+                }
+                OutlinedButton(
+                    onClick = viewModel::refreshImportSourceNow,
+                    enabled = !uiState.isRefreshingImportSource
+                ) {
+                    Text(if (uiState.isRefreshingImportSource) "更新中..." else "立即更新")
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                // Presets sit next to the sources that provide them, so the two entries are not split
+                // across cards the user has to look for separately.
+                SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Code,
+                    title = "导入课程表",
+                    valueText = "导入课程表或管理导入方案",
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    onClick = onNavigateToImportPresets
+                )
+            }
+
             SettingsSectionCard(title = "数据") {
                 SettingsInfoTextRow(
                     leadingIcon = Icons.Outlined.Backup,
-                    text = "设置备份仅包含应用偏好配置。",
+                    text = "设置备份仅包含应用偏好配置，不包括课程表与方案源。",
                     textStyle = MaterialTheme.typography.bodyMedium
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -415,14 +497,6 @@ fun SettingsScreen(
                         Text("导出备份")
                     }
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                SettingsClickableRow(
-                    leadingIcon = Icons.Outlined.Language,
-                    title = "导入方案",
-                    valueText = "管理自己的脚本",
-                    valueColor = MaterialTheme.colorScheme.primary,
-                    onClick = onNavigateToImportPresets
-                )
             }
 
             SettingsSectionCard(title = "更新") {
@@ -882,6 +956,36 @@ private fun Context.openNotificationSettings(launch: (Intent) -> Unit) {
         candidates = listOf(notificationIntent)
     )
 }
+
+/**
+ * Cadences offered for refreshing the built-in preset source.
+ *
+ * Discrete choices rather than a slider: the useful values are a handful, and every refresh
+ * re-downloads the shared runner and all families the index declares.
+ */
+private val IMPORT_SOURCE_INTERVAL_CHOICES = listOf(1, 3, 7, 14, 30)
+
+private fun importSourceIntervalLabel(days: Int): String = when (days) {
+    1 -> "每天"
+    3 -> "每 3 天"
+    7 -> "每周"
+    14 -> "每 2 周"
+    30 -> "每月"
+    else -> "每 $days 天"
+}
+
+private val IMPORT_SOURCE_REFRESH_TIME_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
+/** Renders the last successful refresh, or says so when it has never happened. */
+private fun formatImportSourceRefreshTime(millis: Long): String =
+    if (millis <= 0L) {
+        "尚未更新"
+    } else {
+        Instant.ofEpochMilli(millis)
+            .atZone(ZoneId.systemDefault())
+            .format(IMPORT_SOURCE_REFRESH_TIME_FORMATTER)
+    }
 
 /**
  * Opens battery optimization screens for whitelist configuration with safe fallbacks.

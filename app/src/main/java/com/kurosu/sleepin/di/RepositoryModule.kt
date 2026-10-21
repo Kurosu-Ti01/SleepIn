@@ -1,20 +1,17 @@
 package com.kurosu.sleepin.di
 
 import android.content.ContentResolver
-import android.content.res.AssetManager
 import com.kurosu.sleepin.data.local.SleepInDatabase
 import com.kurosu.sleepin.data.csv.CsvExporter
 import com.kurosu.sleepin.data.csv.CsvImporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvExporter
 import com.kurosu.sleepin.data.csv.ScheduleCsvImporter
-import com.kurosu.sleepin.data.importer.BundledImportPresetSource
 import com.kurosu.sleepin.data.importer.CachedFamilyRepository
 import com.kurosu.sleepin.data.importer.CustomImportPresetStore
 import com.kurosu.sleepin.data.importer.ImportPayloadParser
 import com.kurosu.sleepin.data.importer.ImportPresetFileStore
 import com.kurosu.sleepin.data.importer.ImportSourceAssembler
 import com.kurosu.sleepin.data.importer.ImportSourceFileStore
-import com.kurosu.sleepin.data.importer.ImportPresetIndexParser
 import com.kurosu.sleepin.data.importer.MutableImportPresetSource
 import com.kurosu.sleepin.data.importer.ImportSourceIndexParser
 import com.kurosu.sleepin.data.importer.ImportedSourceImporter
@@ -56,8 +53,6 @@ object RepositoryModule {
     fun provideScheduleCsvExporter(): ScheduleCsvExporter = ScheduleCsvExporter()
 
     fun provideImportPayloadParser(): ImportPayloadParser = ImportPayloadParser()
-
-    fun provideImportPresetIndexParser(): ImportPresetIndexParser = ImportPresetIndexParser()
 
     fun provideImportSourceIndexParser(): ImportSourceIndexParser = ImportSourceIndexParser()
 
@@ -105,6 +100,8 @@ object RepositoryModule {
             indexParser = sourceIndexParser,
             assembler = ImportSourceAssembler()
         ),
+        remotePresets = remotePresets,
+        sourceFileStore = sourceFileStore,
         contentResolver = contentResolver
     )
 
@@ -121,23 +118,22 @@ object RepositoryModule {
     /**
      * Provides the reader for import presets.
      *
-     * The bundled source comes first and the user's own presets after it, so a preset the user added
-     * replaces a bundled one with the same id. A downloaded index joins the list in the same way.
+     * The app ships no presets of its own, so every preset in the list was either imported from a
+     * source or written by the user. Imported presets come first and the user's own after them, so a
+     * preset the user added replaces an imported one with the same id.
      *
-     * Debug builds add a sample source between them ([debugImportPresetSources]); release builds add
-     * nothing, because the sample and its script live in the debug source set only.
+     * Debug builds add a sample source ([debugImportPresetSources]); release builds add nothing,
+     * because the sample and its script live in the debug source set only.
      */
     internal fun provideImportPresetRepository(
-        assets: AssetManager,
-        parser: ImportPresetIndexParser,
         customPresets: MutableImportPresetSource,
         remotePresets: RemoteImportPresetStore
     ): ImportPresetRepository = ImportPresetRepositoryImpl(
         // The user's own presets take part in the merge and are also the only writable source, so they
         // appear in both roles.
-        sources = listOf(BundledImportPresetSource(assets = assets, parser = parser)) +
+        sources = listOf(remotePresets) +
             debugImportPresetSources() +
-            listOf(remotePresets, customPresets),
+            listOf(customPresets),
         customPresets = customPresets
     )
 

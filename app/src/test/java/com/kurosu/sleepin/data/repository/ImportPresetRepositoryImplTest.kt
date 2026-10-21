@@ -16,26 +16,26 @@ import org.junit.Test
 /**
  * Unit tests for merging preset sources.
  *
- * The merge order is the mechanism that lets a user's own preset replace the bundled one of the same
- * id, and later a downloaded one replace both, so it is worth pinning down before more sources exist.
+ * The merge order is the mechanism that lets a user's own preset replace an imported one of the same
+ * id, so it is worth pinning down as sources are added.
  */
 class ImportPresetRepositoryImplTest {
 
     @Test
     fun getPresets_returnsThePresetsOfASingleSource() = runBlocking {
         val repository = repositoryOf(
-            FakeImportPresetSource(ImportPresetSourceKind.BUNDLED, listOf(preset(id = "a")))
+            FakeImportPresetSource(ImportPresetSourceKind.REMOTE, listOf(preset(id = "a")))
         )
 
         assertEquals(listOf("a"), repository.getPresets().map { it.id })
     }
 
     @Test
-    fun getPresets_letsAMutableSourceReplaceABundledPresetWithTheSameId() = runBlocking {
+    fun getPresets_letsAMutableSourceReplaceAnImportedPresetWithTheSameId() = runBlocking {
         val repository = repositoryOf(
             FakeImportPresetSource(
-                ImportPresetSourceKind.BUNDLED,
-                listOf(preset(id = "sample-preset", name = "内置名称"))
+                ImportPresetSourceKind.REMOTE,
+                listOf(preset(id = "sample-preset", name = "源里的名称"))
             ),
             FakeMutableImportPresetSource(
                 presets = listOf(
@@ -59,7 +59,7 @@ class ImportPresetRepositoryImplTest {
     fun getPresets_ordersByGroupThenInitialThenName() = runBlocking {
         val repository = repositoryOf(
             FakeImportPresetSource(
-                ImportPresetSourceKind.BUNDLED,
+                ImportPresetSourceKind.REMOTE,
                 listOf(
                     preset(id = "general", group = ImportPresetGroup.GENERAL, initial = "A", name = "a"),
                     preset(id = "postgraduate", group = ImportPresetGroup.POSTGRADUATE, initial = "Z", name = "z"),
@@ -91,9 +91,9 @@ class ImportPresetRepositoryImplTest {
         val scriptPath = "presets/shared/script.js"
         val repository = repositoryOf(
             FakeImportPresetSource(
-                ImportPresetSourceKind.BUNDLED,
+                ImportPresetSourceKind.REMOTE,
                 presets = emptyList(),
-                scripts = mapOf(scriptPath to "bundled script")
+                scripts = mapOf(scriptPath to "imported script")
             ),
             FakeMutableImportPresetSource(
                 scripts = mapOf(scriptPath to "custom script")
@@ -101,8 +101,8 @@ class ImportPresetRepositoryImplTest {
         )
 
         assertEquals(
-            "bundled script",
-            repository.readScript(preset(id = "shared", scriptPath = scriptPath, source = ImportPresetSourceKind.BUNDLED))
+            "imported script",
+            repository.readScript(preset(id = "shared", scriptPath = scriptPath, source = ImportPresetSourceKind.REMOTE))
         )
         assertEquals(
             "custom script",
@@ -113,10 +113,12 @@ class ImportPresetRepositoryImplTest {
     @Test
     fun readScript_returnsNull_whenNoSourceMatchesThePreset() = runBlocking {
         val repository = repositoryOf(
-            FakeImportPresetSource(ImportPresetSourceKind.BUNDLED, presets = emptyList())
+            FakeImportPresetSource(ImportPresetSourceKind.REMOTE, presets = emptyList())
         )
 
-        assertNull(repository.readScript(preset(id = "a", source = ImportPresetSourceKind.REMOTE)))
+        // The user's own presets are not in `sources`, so asking for one finds no source to read
+        // through, even though a writable source is registered separately.
+        assertNull(repository.readScript(preset(id = "a", source = ImportPresetSourceKind.CUSTOM)))
     }
 
     @Test
@@ -209,7 +211,7 @@ private fun preset(
     group: ImportPresetGroup = ImportPresetGroup.GENERAL,
     initial: String = "A",
     scriptPath: String = "presets/$id/script.js",
-    source: ImportPresetSourceKind = ImportPresetSourceKind.BUNDLED
+    source: ImportPresetSourceKind = ImportPresetSourceKind.REMOTE
 ) = ImportPreset(
     id = id,
     name = name,
@@ -217,7 +219,6 @@ private fun preset(
     initial = initial,
     startUrl = null,
     scriptPath = scriptPath,
-    scriptSha256 = null,
     description = "说明",
     maintainer = "SleepIn",
     source = source

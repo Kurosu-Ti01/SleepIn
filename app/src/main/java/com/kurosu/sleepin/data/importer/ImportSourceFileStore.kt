@@ -63,6 +63,26 @@ class ImportSourceFileStore(private val rootDirectory: File) {
             .sorted()
     }
 
+    /**
+     * Removes a cached directory and everything under it.
+     *
+     * Used when a source is forgotten or re-pointed: the scripts it assembled are keyed by the source, so
+     * they are unreachable afterwards and would otherwise accumulate a few megabytes per source.
+     *
+     * @return true when the directory is gone, including when it was never there.
+     */
+    suspend fun deleteDirectory(relativePath: String): Boolean = withContext(Dispatchers.IO) {
+        val directory = resolve(relativePath) ?: return@withContext false
+        try {
+            if (!directory.exists()) return@withContext true
+            directory.deleteRecursively()
+        } catch (_: IOException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        }
+    }
+
     private fun resolve(relativePath: String): File? {
         if (!isSafeRelativePath(relativePath)) return null
         val candidate = File(rootDirectory, relativePath)

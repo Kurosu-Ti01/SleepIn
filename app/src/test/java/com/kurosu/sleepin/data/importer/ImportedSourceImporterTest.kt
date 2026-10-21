@@ -36,7 +36,9 @@ class ImportedSourceImporterTest {
         fileStore = ImportSourceFileStore(File(temporaryFolder.root, "cache"))
     }
 
-    private fun newImporter(): ImportedSourceImporter = ImportedSourceImporter(
+    private fun newImporter(
+        registry: ImportedPresetRegistry = this.registry
+    ): ImportedSourceImporter = ImportedSourceImporter(
         registry = registry,
         sourceFileStore = fileStore,
         indexParser = ImportSourceIndexParser(),
@@ -262,6 +264,60 @@ class ImportedSourceImporterTest {
         assertEquals(FAMILY_JSON, fileStore.read(ImportSourceFileStore.familyMetadataPath("unused")))
     }
 
+    @Test
+    fun import_skipsTheWork_whenTheIndexVersionHasNotMoved() = runBlocking {
+        // The index itself has to be downloaded to know its version — there is no smaller way to ask a
+        // source whether it changed — but everything after that is skipped: no family files, no
+        // assembly, and no rewriting one script per preset.
+        val registry = FakeRegistry(mapOf(SOURCE_KEY to 1))
+        val reader = FakeReader(
+            SOURCE_INDEX_FILE_NAME to familyIndex(),
+            "lib/runner.js" to RUNNER,
+            "families/fam/family.json" to FAMILY_JSON,
+            "families/fam/adapter.js" to ADAPTER
+        )
+
+        val result = newImporter(registry).import(reader, SOURCE_KEY, DIRECTORY_KEY, reuseLocalFamilies = false)
+
+        assertEquals(ImportSourceImportResult.Unchanged(1), result)
+        assertEquals(listOf(SOURCE_INDEX_FILE_NAME), reader.requestedPaths)
+        assertTrue("不该重新登记", registry.presets.isEmpty())
+    }
+
+    @Test
+    fun import_importsAgain_whenTheIndexVersionMovesOn() = runBlocking {
+        val registry = FakeRegistry(mapOf(SOURCE_KEY to 0))
+        val reader = FakeReader(
+            SOURCE_INDEX_FILE_NAME to familyIndex(),
+            "lib/runner.js" to RUNNER,
+            "families/fam/family.json" to FAMILY_JSON,
+            "families/fam/adapter.js" to ADAPTER
+        )
+
+        val result = newImporter(registry).import(reader, SOURCE_KEY, DIRECTORY_KEY, reuseLocalFamilies = false)
+
+        assertTrue(result is ImportSourceImportResult.Imported)
+        assertEquals(1, registry.indexVersion)
+    }
+
+    @Test
+    fun import_importsWhenAVersionMovedBackwards() = runBlocking {
+        // A mirror serving an older index must still be applied: the version is only compared for
+        // equality, never as "is it newer".
+        val registry = FakeRegistry(mapOf(SOURCE_KEY to 99))
+        val reader = FakeReader(
+            SOURCE_INDEX_FILE_NAME to familyIndex(),
+            "lib/runner.js" to RUNNER,
+            "families/fam/family.json" to FAMILY_JSON,
+            "families/fam/adapter.js" to ADAPTER
+        )
+
+        val result = newImporter(registry).import(reader, SOURCE_KEY, DIRECTORY_KEY, reuseLocalFamilies = false)
+
+        assertTrue(result is ImportSourceImportResult.Imported)
+        assertEquals(1, registry.indexVersion)
+    }
+
     /** Index with one family and one preset that uses it, through the real family file paths. */
     private fun familyIndex(): String = """
         {
@@ -307,11 +363,17 @@ class ImportedSourceImporterTest {
         }
     }
 
-    private class FakeRegistry : ImportedPresetRegistry {
+    private class FakeRegistry(
+        /** Version a previous import left behind, keyed by source. */
+        private val storedVersions: Map<String, Int> = emptyMap()
+    ) : ImportedPresetRegistry {
 
         var sourceKey: String? = null
         var indexVersion: Int = 0
         var presets: List<RemotePresetDto> = emptyList()
+        var forgottenSourceKey: String? = null
+
+        override suspend fun storedIndexVersion(sourceKey: String): Int? = storedVersions[sourceKey]
 
         override suspend fun replaceSource(
             sourceKey: String,
@@ -321,6 +383,11 @@ class ImportedSourceImporterTest {
             this.sourceKey = sourceKey
             this.indexVersion = indexVersion
             this.presets = presets
+            return true
+        }
+
+        override suspend fun forgetSource(sourceKey: String): Boolean {
+            forgottenSourceKey = sourceKey
             return true
         }
     }

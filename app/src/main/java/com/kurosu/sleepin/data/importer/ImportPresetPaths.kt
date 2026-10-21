@@ -4,8 +4,8 @@ package com.kurosu.sleepin.data.importer
  * Identifier and path rules shared by everything that turns a preset reference into a file.
  *
  * These are the app's security boundary for import presets, so they live in one place rather than
- * being restated by each storage layer: a preset index, a user's own presets and a downloaded index
- * all name files the same way, and all of them have to be checked the same way.
+ * being restated by each storage layer: an imported source and a user's own presets both name files
+ * the same way, and both have to be checked the same way.
  *
  * The layout is deliberately identical across sources — `<root>/presets/<id>/<script>` — so the same
  * preset can be moved between them, and so a rule that is enforced for one source is meaningful for
@@ -27,16 +27,6 @@ internal fun isValidPresetId(id: String): Boolean = PRESET_ID_PATTERN.matches(id
 
 /** Path of [presetId]'s script, relative to a source's own root. */
 internal fun scriptPathFor(presetId: String): String = "presets/$presetId/$PRESET_SCRIPT_FILE_NAME"
-
-/**
- * Whether [path] may be used as a script reference for the preset identified by [presetId].
- *
- * An index is data, and a remote one is data the app did not author, while the file it names is read
- * and executed inside the WebView. Requiring a relative path inside the preset's own folder is what
- * stops a tampered index from pointing the app at some other file in its private storage.
- */
-internal fun isSafeScriptPath(path: String, presetId: String): Boolean =
-    isSafeRelativePath(path) && path.startsWith("presets/$presetId/")
 
 /**
  * Whether [path] is a relative path that cannot escape the directory it is resolved against.

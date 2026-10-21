@@ -10,12 +10,23 @@ import java.security.MessageDigest
  */
 internal interface ImportedPresetRegistry {
 
+    /**
+     * Version of the index that was last imported for [sourceKey], or null when it has never been.
+     *
+     * The importer compares it with the version it just read: an unchanged version means the copy on this
+     * device is current, so nothing has to be downloaded, assembled or written.
+     */
+    suspend fun storedIndexVersion(sourceKey: String): Int?
+
     /** Replaces whatever [sourceKey] had registered before with [presets]. */
     suspend fun replaceSource(
         sourceKey: String,
         indexVersion: Int,
         presets: List<RemotePresetDto>
     ): Boolean
+
+    /** Forgets [sourceKey] entirely. Returns true when nothing is registered under it afterwards. */
+    suspend fun forgetSource(sourceKey: String): Boolean
 }
 
 /**
@@ -43,41 +54,52 @@ internal class ImportedSourceImporter(
         sourceKey: String,
         directoryKey: String,
         reuseLocalFamilies: Boolean
-    ): ImportSourceImportResult = try {
-        val indexBytes = reader.readIndex() ?: reject("源里找不到 $SOURCE_INDEX_FILE_NAME")
-        val index = indexParser.parse(indexBytes.toString(Charsets.UTF_8))
-            .getOrElse { reject(it.message ?: "源索引无效") }
+    ): ImportSourceImportResult {
+        return try {
+            val indexBytes = reader.readIndex() ?: reject("源里找不到 $SOURCE_INDEX_FILE_NAME")
+            val index = indexParser.parse(indexBytes.toString(Charsets.UTF_8))
+                .getOrElse { reject(it.message ?: "源索引无效") }
 
-        // The runner and *every* declared family are cached, which is more than this import strictly needs:
-        // the cache is what the editor's "reuse a cached family" option reads, so a source that publishes
-        // families before it has any preset still has to leave them usable. Caching the runner is part of
-        // the same promise — without it no cached family could be assembled into anything.
-        val runnerText = readVerified(reader, index.runner.path, index.runner.sha256).also { text ->
-            // A failed cache write is deliberately not fatal: this import already succeeded, and only that
-            // optional path becomes unavailable (and [availableFamilyIds] reports it honestly by then).
-            sourceFileStore.write(ImportSourceFileStore.runnerPath(), text)
-        }
-        val families = loadFamilies(
-            reader = reader,
-            families = index.families,
-            reuseLocalFamilies = reuseLocalFamilies
-        )
+            // The publisher's generator bumps indexVersion whenever the published bytes change, and CI
+            // fails when a generated index is stale. An equal version therefore means this device already
+            // holds the current release, and the rest of this method would download ~120 KB, assemble one
+            // script per preset and write them all back unchanged.
+            val storedVersion = registry.storedIndexVersion(sourceKey)
+            if (storedVersion != null && storedVersion == index.indexVersion) {
+                return ImportSourceImportResult.Unchanged(index.indexVersion)
+            }
 
-        val presets = index.presets.map { preset ->
-            storePreset(reader, preset, runnerText, families, directoryKey)
-        }
+            // The runner and *every* declared family are cached, which is more than this import strictly
+            // needs: the cache is what the editor's "reuse a cached family" option reads, so a source that
+            // publishes families before it has any preset still has to leave them usable. Caching the
+            // runner is part of the same promise — without it no cached family could be assembled.
+            val runnerText = readVerified(reader, index.runner.path, index.runner.sha256).also { text ->
+                // A failed cache write is deliberately not fatal: this import already succeeded, and only
+                // that optional path becomes unavailable (and [availableFamilyIds] reports it by then).
+                sourceFileStore.write(ImportSourceFileStore.runnerPath(), text)
+            }
+            val families = loadFamilies(
+                reader = reader,
+                families = index.families,
+                reuseLocalFamilies = reuseLocalFamilies
+            )
 
-        require(registry.replaceSource(sourceKey, index.indexVersion, presets)) {
-            "无法保存导入的方案索引"
+            val presets = index.presets.map { preset ->
+                storePreset(reader, preset, runnerText, families, directoryKey)
+            }
+
+            require(registry.replaceSource(sourceKey, index.indexVersion, presets)) {
+                "无法保存导入的方案索引"
+            }
+            ImportSourceImportResult.Imported(
+                presetCount = presets.size,
+                familyCount = index.families.size
+            )
+        } catch (error: IllegalArgumentException) {
+            ImportSourceImportResult.Rejected(error.message ?: "源内容不符合要求。")
+        } catch (error: Exception) {
+            ImportSourceImportResult.Failed(error.message ?: "导入源失败。")
         }
-        ImportSourceImportResult.Imported(
-            presetCount = presets.size,
-            familyCount = index.families.size
-        )
-    } catch (error: IllegalArgumentException) {
-        ImportSourceImportResult.Rejected(error.message ?: "源内容不符合要求。")
-    } catch (error: Exception) {
-        ImportSourceImportResult.Failed(error.message ?: "导入源失败。")
     }
 
     /**

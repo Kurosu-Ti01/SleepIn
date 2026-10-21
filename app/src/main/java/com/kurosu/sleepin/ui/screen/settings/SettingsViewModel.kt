@@ -7,6 +7,10 @@ import com.kurosu.sleepin.BuildConfig
 import com.kurosu.sleepin.domain.model.AppSettings
 import com.kurosu.sleepin.domain.model.AppUpdateCheckResult
 import com.kurosu.sleepin.domain.model.ThemeMode
+import com.kurosu.sleepin.domain.model.importer.MAX_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS
+import com.kurosu.sleepin.domain.model.importer.MIN_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS
+import com.kurosu.sleepin.domain.usecase.importer.ImportSourceRefreshResult
+import com.kurosu.sleepin.domain.usecase.importer.RefreshImportSourcesUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ExportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ImportSettingsBackupUseCase
 import com.kurosu.sleepin.domain.usecase.settings.ObserveSettingsUseCase
@@ -30,6 +34,7 @@ data class SettingsUiState(
     val isLoading: Boolean = true,
     val settings: AppSettings = AppSettings(),
     val isCheckingUpdate: Boolean = false,
+    val isRefreshingImportSource: Boolean = false,
     val message: String? = null
 )
 
@@ -51,7 +56,8 @@ class SettingsViewModel(
     private val updateSettingsUseCase: UpdateSettingsUseCase,
     private val exportSettingsBackupUseCase: ExportSettingsBackupUseCase,
     private val importSettingsBackupUseCase: ImportSettingsBackupUseCase,
-    private val performUpdateCheckUseCase: PerformUpdateCheckUseCase
+    private val performUpdateCheckUseCase: PerformUpdateCheckUseCase,
+    private val refreshImportSourcesUseCase: RefreshImportSourcesUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -129,6 +135,42 @@ class SettingsViewModel(
     }
 
     /**
+     * Toggles background refresh of the built-in preset source.
+     */
+    fun setImportSourceAutoRefreshEnabled(enabled: Boolean) =
+        updateSettings { it.copy(importSourceAutoRefreshEnabled = enabled) }
+
+    /**
+     * Changes how often the built-in preset source is refreshed.
+     */
+    fun setImportSourceRefreshIntervalDays(days: Int) =
+        updateSettings {
+            it.copy(
+                importSourceRefreshIntervalDays = days.coerceIn(
+                    MIN_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS,
+                    MAX_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS
+                )
+            )
+        }
+
+    /**
+     * Refreshes the built-in source on the user's command, ignoring both the interval and the toggle.
+     *
+     * Runs in the ViewModel rather than being queued as work so the result can be reported straight
+     * away — the user pressed a button and is waiting for an answer.
+     */
+    fun refreshImportSourceNow() {
+        if (_uiState.value.isRefreshingImportSource) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshingImportSource = true) }
+            val result = refreshImportSourcesUseCase(force = true)
+            _uiState.update {
+                it.copy(isRefreshingImportSource = false, message = result.toUserMessage())
+            }
+        }
+    }
+
+    /**
      * Marks current update as acknowledged after download is queued.
      */
     fun onDownloadEnqueued() {
@@ -176,6 +218,7 @@ class SettingsViewModel(
                     isLoading = false,
                     settings = settings,
                     isCheckingUpdate = _uiState.value.isCheckingUpdate,
+                    isRefreshingImportSource = _uiState.value.isRefreshingImportSource,
                     message = _uiState.value.message
                 )
                 _uiState.value = state
@@ -192,7 +235,8 @@ class SettingsViewModel(
             updateSettingsUseCase: UpdateSettingsUseCase,
             exportSettingsBackupUseCase: ExportSettingsBackupUseCase,
             importSettingsBackupUseCase: ImportSettingsBackupUseCase,
-            performUpdateCheckUseCase: PerformUpdateCheckUseCase
+            performUpdateCheckUseCase: PerformUpdateCheckUseCase,
+            refreshImportSourcesUseCase: RefreshImportSourcesUseCase
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -202,7 +246,8 @@ class SettingsViewModel(
                         updateSettingsUseCase = updateSettingsUseCase,
                         exportSettingsBackupUseCase = exportSettingsBackupUseCase,
                         importSettingsBackupUseCase = importSettingsBackupUseCase,
-                        performUpdateCheckUseCase = performUpdateCheckUseCase
+                        performUpdateCheckUseCase = performUpdateCheckUseCase,
+                        refreshImportSourcesUseCase = refreshImportSourcesUseCase
                     ) as T
                 }
             }
@@ -215,6 +260,17 @@ private fun AppUpdateCheckResult.toUserMessage(): String =
         is AppUpdateCheckResult.UpToDate -> "当前已是最新版本（$latestVersionTag）"
         is AppUpdateCheckResult.Failed -> "检查更新失败：$reason"
         AppUpdateCheckResult.Skipped -> "已跳过自动检查"
+    }
+
+private fun ImportSourceRefreshResult.toUserMessage(): String =
+    when (this) {
+        is ImportSourceRefreshResult.Completed -> when {
+            failures.isNotEmpty() -> "方案源更新有 ${failures.size} 个失败：${failures.first()}"
+            updated > 0 -> "已更新 $updated 个方案源（共检查 $checked 个）"
+            else -> "已检查 $checked 个方案源，都是最新的"
+        }
+
+        ImportSourceRefreshResult.Skipped -> "还没到更新时间"
     }
 
 

@@ -9,6 +9,9 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kurosu.sleepin.domain.model.AppSettings
 import com.kurosu.sleepin.domain.model.ThemeMode
+import com.kurosu.sleepin.domain.model.importer.DEFAULT_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS
+import com.kurosu.sleepin.domain.model.importer.MAX_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS
+import com.kurosu.sleepin.domain.model.importer.MIN_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS
 import com.kurosu.sleepin.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -51,7 +54,13 @@ class SettingsRepositoryImpl(
             latestReleasePageUrl = prefs[Keys.LATEST_RELEASE_PAGE_URL] ?: "",
             dismissedUpdateVersion = prefs[Keys.DISMISSED_UPDATE_VERSION] ?: "",
             lastUpdateCheckError = prefs[Keys.LAST_UPDATE_CHECK_ERROR] ?: "",
-            lastUpdateCheckAtMillis = prefs[Keys.LAST_UPDATE_CHECK_AT_MILLIS] ?: 0L
+            lastUpdateCheckAtMillis = prefs[Keys.LAST_UPDATE_CHECK_AT_MILLIS] ?: 0L,
+            importSourceAutoRefreshEnabled = prefs[Keys.IMPORT_SOURCE_AUTO_REFRESH_ENABLED] ?: true,
+            importSourceRefreshIntervalDays = (prefs[Keys.IMPORT_SOURCE_REFRESH_INTERVAL_DAYS]
+                ?: DEFAULT_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS)
+                .coerceIn(MIN_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS, MAX_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS),
+            importSourceLastRefreshAtMillis = prefs[Keys.IMPORT_SOURCE_LAST_REFRESH_AT_MILLIS] ?: 0L,
+            importSourceLastRefreshError = prefs[Keys.IMPORT_SOURCE_LAST_REFRESH_ERROR] ?: ""
         )
     }
 
@@ -73,6 +82,11 @@ class SettingsRepositoryImpl(
             prefs[Keys.DISMISSED_UPDATE_VERSION] = settings.dismissedUpdateVersion
             prefs[Keys.LAST_UPDATE_CHECK_ERROR] = settings.lastUpdateCheckError
             prefs[Keys.LAST_UPDATE_CHECK_AT_MILLIS] = settings.lastUpdateCheckAtMillis
+            prefs[Keys.IMPORT_SOURCE_AUTO_REFRESH_ENABLED] = settings.importSourceAutoRefreshEnabled
+            prefs[Keys.IMPORT_SOURCE_REFRESH_INTERVAL_DAYS] = settings.importSourceRefreshIntervalDays
+                .coerceIn(MIN_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS, MAX_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS)
+            prefs[Keys.IMPORT_SOURCE_LAST_REFRESH_AT_MILLIS] = settings.importSourceLastRefreshAtMillis
+            prefs[Keys.IMPORT_SOURCE_LAST_REFRESH_ERROR] = settings.importSourceLastRefreshError
         }
     }
 
@@ -95,7 +109,11 @@ class SettingsRepositoryImpl(
             latestReleasePageUrl = current.latestReleasePageUrl,
             dismissedUpdateVersion = current.dismissedUpdateVersion,
             lastUpdateCheckError = current.lastUpdateCheckError,
-            lastUpdateCheckAtMillis = current.lastUpdateCheckAtMillis
+            lastUpdateCheckAtMillis = current.lastUpdateCheckAtMillis,
+            importSourceAutoRefreshEnabled = current.importSourceAutoRefreshEnabled,
+            importSourceRefreshIntervalDays = current.importSourceRefreshIntervalDays,
+            importSourceLastRefreshAtMillis = current.importSourceLastRefreshAtMillis,
+            importSourceLastRefreshError = current.importSourceLastRefreshError
         )
         return json.encodeToString(SettingsBackupPayload.serializer(), payload)
     }
@@ -118,7 +136,12 @@ class SettingsRepositoryImpl(
             latestReleasePageUrl = payload.latestReleasePageUrl,
             dismissedUpdateVersion = payload.dismissedUpdateVersion,
             lastUpdateCheckError = payload.lastUpdateCheckError,
-            lastUpdateCheckAtMillis = payload.lastUpdateCheckAtMillis
+            lastUpdateCheckAtMillis = payload.lastUpdateCheckAtMillis,
+            importSourceAutoRefreshEnabled = payload.importSourceAutoRefreshEnabled,
+            importSourceRefreshIntervalDays = payload.importSourceRefreshIntervalDays
+                .coerceIn(MIN_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS, MAX_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS),
+            importSourceLastRefreshAtMillis = payload.importSourceLastRefreshAtMillis,
+            importSourceLastRefreshError = payload.importSourceLastRefreshError
         )
         updateSettings(restored)
     }
@@ -143,6 +166,10 @@ class SettingsRepositoryImpl(
         val DISMISSED_UPDATE_VERSION = stringPreferencesKey("dismissed_update_version")
         val LAST_UPDATE_CHECK_ERROR = stringPreferencesKey("last_update_check_error")
         val LAST_UPDATE_CHECK_AT_MILLIS = longPreferencesKey("last_update_check_at_millis")
+        val IMPORT_SOURCE_AUTO_REFRESH_ENABLED = booleanPreferencesKey("import_source_auto_refresh_enabled")
+        val IMPORT_SOURCE_REFRESH_INTERVAL_DAYS = intPreferencesKey("import_source_refresh_interval_days")
+        val IMPORT_SOURCE_LAST_REFRESH_AT_MILLIS = longPreferencesKey("import_source_last_refresh_at_millis")
+        val IMPORT_SOURCE_LAST_REFRESH_ERROR = stringPreferencesKey("import_source_last_refresh_error")
     }
 
     @Serializable
@@ -163,7 +190,11 @@ class SettingsRepositoryImpl(
         val latestReleasePageUrl: String = "",
         val dismissedUpdateVersion: String = "",
         val lastUpdateCheckError: String = "",
-        val lastUpdateCheckAtMillis: Long = 0L
+        val lastUpdateCheckAtMillis: Long = 0L,
+        val importSourceAutoRefreshEnabled: Boolean = true,
+        val importSourceRefreshIntervalDays: Int = DEFAULT_IMPORT_SOURCE_REFRESH_INTERVAL_DAYS,
+        val importSourceLastRefreshAtMillis: Long = 0L,
+        val importSourceLastRefreshError: String = ""
     )
 }
 

@@ -6,6 +6,7 @@ import com.kurosu.sleepin.data.preferences.ImportPresetPreferenceStore
 import com.kurosu.sleepin.domain.model.importer.ImportPreset
 import com.kurosu.sleepin.domain.model.importer.ImportPresetGroup
 import com.kurosu.sleepin.domain.model.importer.ImportPresetSourceKind
+import com.kurosu.sleepin.domain.model.importer.RegisteredImportSource
 import java.io.IOException
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
@@ -34,7 +35,13 @@ internal data class RemotePresetDto(
 internal data class RemoteSourceDto(
     val sourceUrl: String,
     val indexVersion: Int,
-    val presets: List<RemotePresetDto>
+    val presets: List<RemotePresetDto>,
+    /**
+     * Name the user gave this source, or null to show something derived from the address.
+     *
+     * Nullable and defaulted so sources registered before naming existed keep loading.
+     */
+    val displayName: String? = null
 )
 
 @Serializable
@@ -62,23 +69,61 @@ internal class RemoteImportPresetStore(
 
     override suspend fun readScript(scriptPath: String): String? = fileStore.read(scriptPath)
 
+    override suspend fun storedIndexVersion(sourceKey: String): Int? =
+        readSources().firstOrNull { source -> source.sourceUrl == sourceKey }?.indexVersion
+
     override suspend fun replaceSource(
         sourceKey: String,
         indexVersion: Int,
         presets: List<RemotePresetDto>
     ): Boolean {
         val existing = readSources().filterNot { it.sourceUrl == sourceKey }
-        return try {
-            dataStore.edit { preferences ->
-                preferences[KEY] = json.encodeToString(
-                    RemoteSourceListDto.serializer(),
-                    RemoteSourceListDto(sources = existing + RemoteSourceDto(sourceKey, indexVersion, presets))
-                )
+        return writeSources(
+            existing + RemoteSourceDto(
+                sourceUrl = sourceKey,
+                indexVersion = indexVersion,
+                presets = presets
+            )
+        )
+    }
+
+    override suspend fun forgetSource(sourceKey: String): Boolean {
+        val remaining = readSources().filterNot { it.sourceUrl == sourceKey }
+        return writeSources(remaining)
+    }
+
+    /** Gives a source a display name, or clears it when [displayName] is blank. */
+    suspend fun renameSource(sourceKey: String, displayName: String?): Boolean {
+        val cleaned = displayName?.trim()?.takeUnless { it.isEmpty() }
+        val sources = readSources()
+        if (sources.none { it.sourceUrl == sourceKey }) return false
+        return writeSources(
+            sources.map { source ->
+                if (source.sourceUrl == sourceKey) source.copy(displayName = cleaned) else source
             }
-            true
-        } catch (_: IOException) {
-            false
+        )
+    }
+
+    /** Every registered source, in the order they were first imported. */
+    suspend fun registeredSources(): List<RegisteredImportSource> = readSources().map { source ->
+        RegisteredImportSource(
+            sourceKey = source.sourceUrl,
+            indexVersion = source.indexVersion,
+            presetCount = source.presets.size,
+            displayName = source.displayName
+        )
+    }
+
+    private suspend fun writeSources(sources: List<RemoteSourceDto>): Boolean = try {
+        dataStore.edit { preferences ->
+            preferences[KEY] = json.encodeToString(
+                RemoteSourceListDto.serializer(),
+                RemoteSourceListDto(sources = sources)
+            )
         }
+        true
+    } catch (_: IOException) {
+        false
     }
 
     private suspend fun readSources(): List<RemoteSourceDto> {
@@ -107,7 +152,6 @@ internal class RemoteImportPresetStore(
             initial = initial,
             startUrl = startUrl,
             scriptPath = scriptPath,
-            scriptSha256 = null,
             description = description,
             maintainer = maintainer,
             source = ImportPresetSourceKind.REMOTE,

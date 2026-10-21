@@ -132,9 +132,6 @@ internal fun CustomImportPresetDto.toImportPresetOrNull(): ImportPreset? {
         initial = resolvedInitial,
         startUrl = startUrl?.trim()?.takeUnless { it.isEmpty() },
         scriptPath = scriptPathFor(resolvedId),
-        // The user supplied this script directly, so there is no remote copy for a digest to guard
-        // against; nothing ever replaces it behind their back.
-        scriptSha256 = null,
         description = description.trim(),
         maintainer = maintainer.trim(),
         source = ImportPresetSourceKind.CUSTOM,

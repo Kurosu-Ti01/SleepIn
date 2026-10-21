@@ -39,6 +39,15 @@ sealed class Screen(val route: String) {
     data object Settings : Screen("settings")
 
     /**
+     * Shows the preset sources this device has imported, so their addresses can be changed or a source
+     * the user added can be removed.
+     *
+     * A page rather than a dialog in settings: each row has its own actions, and deleting one asks for a
+     * confirmation — nesting those dialogs inside a dialog reads badly.
+     */
+    data object ImportSourceList : Screen("import_source_list")
+
+    /**
      * Runs an import script inside a WebView.
      *
      * The schedule is part of the route because linking the result to a class-time template is a

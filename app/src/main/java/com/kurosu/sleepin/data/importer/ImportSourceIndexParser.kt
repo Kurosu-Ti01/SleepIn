@@ -40,6 +40,15 @@ internal data class ImportSourcePresetDto(
     val rewrite: ImportSourceFileDto? = null
 )
 
+/** Wire shape of one school directory entry. */
+@Serializable
+internal data class ImportPresetSchoolDto(
+    val id: String? = null,
+    val name: String? = null,
+    val code: String? = null,
+    val aliases: List<String>? = null
+)
+
 /** Wire shape of a source index that contains sources, not generated scripts. */
 @Serializable
 internal data class ImportSourceIndexDto(

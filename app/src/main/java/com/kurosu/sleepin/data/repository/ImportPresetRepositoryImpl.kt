@@ -11,8 +11,8 @@ import com.kurosu.sleepin.domain.repository.ImportPresetRepository
  * Merges every preset source into the single list the screens work with.
  *
  * Sources are consulted in the order they are given, and a later source replaces an earlier preset
- * with the same id. That ordering is what lets a user's own preset override the bundled one, and it
- * will let a downloaded preset override both, without the app having to rewrite any index.
+ * with the same id. That ordering is what lets a user's own preset override an imported one, without
+ * the app having to rewrite any index.
  *
  * Because a preset records only the kind of source it came from, at most one source per kind may be
  * registered: with two, a preset would be read through whichever one happened to come first.

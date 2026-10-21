@@ -85,7 +85,6 @@ class CustomImportPresetCodecTest {
         assertEquals("Sample campus", preset?.schoolName)
         // The path is derived, never stored: the id is the only thing that decides where the script is.
         assertEquals("presets/custom-abc/script.js", preset?.scriptPath)
-        assertNull(preset?.scriptSha256)
     }
 
     @Test
