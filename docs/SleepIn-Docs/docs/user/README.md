@@ -10,5 +10,6 @@ permalink: /user/
 - [快速开始](./quick-start.md)
 - [课程表使用指南](./timetable-guide.md)
 - [CSV 导入导出](./import-export-csv.md)
+- [从教务系统导入](./portal-import.md)
 - [桌面小组件](./widget-guide.md)
 - [常见问题](./faq.md)

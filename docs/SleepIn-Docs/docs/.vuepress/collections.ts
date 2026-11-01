@@ -24,6 +24,7 @@ const zhUserDoc = defineCollection({
     { text: '快速开始', link: '/user/quick-start.md' },
     { text: '课程表使用指南', link: '/user/timetable-guide.md' },
     { text: 'CSV 导入导出', link: '/user/import-export-csv.md' },
+    { text: '从教务系统导入', link: '/user/portal-import.md' },
     { text: '桌面小组件', link: '/user/widget-guide.md' },
     { text: '常见问题', link: '/user/faq.md' }
   ]
