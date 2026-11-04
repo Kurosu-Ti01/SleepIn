@@ -1,6 +1,7 @@
 package com.kurosu.sleepin.ui.screen.home
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,9 @@ private val timelineColumnWidth = 34.dp
 
 /**
  * Full week-view container that composes header, sidebar, grid background, and course cells.
+ *
+ * Accepts an optional shared [verticalScrollState] so pages inside a [androidx.compose.foundation.pager.HorizontalPager]
+ * keep their vertical scroll position aligned as the user swipes horizontally across weeks.
  */
 @Composable
 fun WeekGridView(
@@ -42,30 +46,34 @@ fun WeekGridView(
     todayColumnIndex: Int?,
     currentTimePeriodOffset: Float?,
     onCourseClick: (HomeCourseCellUi) -> Unit,
-    onSwipeToPreviousWeek: () -> Unit,
-    onSwipeToNextWeek: () -> Unit,
+    onSwipeToPreviousWeek: (() -> Unit)? = null,
+    onSwipeToNextWeek: (() -> Unit)? = null,
+    verticalScrollState: ScrollState = rememberScrollState(),
     modifier: Modifier = Modifier,
     rowHeight: Dp = defaultRowHeight
 ) {
-    val verticalScrollState = rememberScrollState()
+    val swipeModifier = if (onSwipeToPreviousWeek != null && onSwipeToNextWeek != null) {
+        Modifier.pointerInput(Unit) {
+            var totalDrag = 0f
+            detectHorizontalDragGestures(
+                onDragStart = { totalDrag = 0f },
+                onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                onDragEnd = {
+                    when {
+                        totalDrag > SWIPE_CHANGE_THRESHOLD_PX -> onSwipeToPreviousWeek()
+                        totalDrag < -SWIPE_CHANGE_THRESHOLD_PX -> onSwipeToNextWeek()
+                    }
+                }
+            )
+        }
+    } else {
+        Modifier
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            // Horizontal drag gesture offers a natural week-switching interaction.
-            .pointerInput(Unit) {
-                var totalDrag = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { totalDrag = 0f },
-                    onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
-                    onDragEnd = {
-                        when {
-                            totalDrag > SWIPE_CHANGE_THRESHOLD_PX -> onSwipeToPreviousWeek()
-                            totalDrag < -SWIPE_CHANGE_THRESHOLD_PX -> onSwipeToNextWeek()
-                        }
-                    }
-                )
-            }
+            .then(swipeModifier)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             Box(modifier = Modifier.width(timelineColumnWidth))

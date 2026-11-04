@@ -1,12 +1,14 @@
 package com.kurosu.sleepin.ui.menu
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
@@ -20,19 +22,19 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kurosu.sleepin.ui.screen.home.HomeTimetableOption
 
@@ -59,8 +61,9 @@ fun HomeMenuSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 20.dp, vertical = 12.dp)
+            .padding(bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         ExposedDropdownMenuBox(
             expanded = timetableExpanded,
@@ -73,7 +76,8 @@ fun HomeMenuSheet(
                 value = selectedTimetable,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("课程表") },
+                shape = RoundedCornerShape(14.dp),
+                label = { Text("当前课程表") },
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = timetableExpanded)
                 }
@@ -97,21 +101,74 @@ fun HomeMenuSheet(
             }
         }
 
-        Text(text = "作息表: $selectedSchedule", style = MaterialTheme.typography.titleMedium)
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "关联作息表",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = selectedSchedule,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
 
-        Text(text = "第 $selectedWeek 周 / 共 $totalWeeks 周")
-        Slider(
-            value = selectedWeek.toFloat(),
-            onValueChange = { onWeekChange(it.toInt()) },
-            valueRange = 1f..totalWeeks.toFloat(),
-            steps = (totalWeeks - 2).coerceAtLeast(0)
-        )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
 
-        HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "快速跳转周次",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = "第 $selectedWeek / $totalWeeks 周",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                Slider(
+                    value = selectedWeek.toFloat(),
+                    onValueChange = { onWeekChange(it.toInt()) },
+                    valueRange = 1f..totalWeeks.toFloat(),
+                    steps = (totalWeeks - 2).coerceAtLeast(0)
+                )
+            }
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             HomeMenuActionButton(
                 modifier = Modifier.weight(1f),
@@ -136,18 +193,7 @@ fun HomeMenuSheet(
 }
 
 /**
- * Renders a compact home menu action button with icon on top and label below.
- */
-/**
- * Compact action tile used in the home menu.
- *
- * Layout: icon on top and label below. Visual style is an outlined square tile
- * with a slightly rounded corner to better frame vertical content.
- *
- * @param modifier Modifier applied to the button (e.g. weight for even columns).
- * @param icon Icon to show above the label.
- * @param label Short text label displayed below the icon.
- * @param onClick Click handler for the tile.
+ * Compact tonal action tile used in the home menu.
  */
 @Composable
 private fun HomeMenuActionButton(
@@ -156,27 +202,30 @@ private fun HomeMenuActionButton(
     label: String,
     onClick: () -> Unit
 ) {
-    OutlinedButton(
-        modifier = modifier.heightIn(min = 64.dp),
+    Surface(
+        modifier = modifier.heightIn(min = 74.dp),
         onClick = onClick,
-        shape = RoundedCornerShape(6.dp),
-        // Use a thicker primary-colored border to increase emphasis for the tile
-        border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary),
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
     ) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
                 maxLines = 1
             )
         }

@@ -4,21 +4,30 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +36,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -43,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -209,88 +220,224 @@ fun ScheduleEditorScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = uiState.name,
-                    onValueChange = viewModel::onNameChange,
-                    label = { Text("作息表名称") },
-                    singleLine = true
-                )
-            }
-
-            item {
-                Text("自动生成", style = MaterialTheme.typography.titleMedium)
-            }
-
-            // Quick generation inputs: first class start + durations + count.
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        modifier = Modifier.weight(1f),
-                        value = uiState.quickStartTime,
-                        onValueChange = viewModel::onQuickStartTimeChange,
-                        label = { Text("第一节开始") },
-                        placeholder = { Text("08:00") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        modifier = Modifier.weight(1f),
-                        value = uiState.quickClassDurationMinutes,
-                        onValueChange = viewModel::onQuickClassDurationChange,
-                        label = { Text("课时(分钟)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
-                    )
-                }
-            }
-
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        modifier = Modifier.weight(1f),
-                        value = uiState.quickBreakMinutes,
-                        onValueChange = viewModel::onQuickBreakChange,
-                        label = { Text("课间(分钟)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        modifier = Modifier.weight(1f),
-                        value = uiState.quickPeriodCount,
-                        onValueChange = viewModel::onQuickPeriodCountChange,
-                        label = { Text("总课节") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
-                    )
-                }
-            }
-
-            item {
-                OutlinedButton(onClick = viewModel::generatePeriods) {
-                    Text("自动生成课节")
-                }
-            }
-
-            item {
-                Text("课节列表", style = MaterialTheme.typography.titleMedium)
-            }
-
-            // Period row editor section.
-            itemsIndexed(uiState.periods) { index, period ->
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        Text(
+                            text = "基本信息",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = uiState.name,
+                            onValueChange = viewModel::onNameChange,
+                            label = { Text("作息表名称") },
+                            singleLine = true
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.AutoAwesome,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "自动生成课节",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        // Quick generation inputs: first class start + durations + count.
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                modifier = Modifier.weight(1f),
+                                value = uiState.quickStartTime,
+                                onValueChange = viewModel::onQuickStartTimeChange,
+                                label = { Text("第一节开始") },
+                                placeholder = { Text("08:00") },
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                modifier = Modifier.weight(1f),
+                                value = uiState.quickClassDurationMinutes,
+                                onValueChange = viewModel::onQuickClassDurationChange,
+                                label = { Text("课时(分钟)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true
+                            )
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                modifier = Modifier.weight(1f),
+                                value = uiState.quickBreakMinutes,
+                                onValueChange = viewModel::onQuickBreakChange,
+                                label = { Text("课间(分钟)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                modifier = Modifier.weight(1f),
+                                value = uiState.quickPeriodCount,
+                                onValueChange = viewModel::onQuickPeriodCountChange,
+                                label = { Text("总课节") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = viewModel::generatePeriods,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text("按上述参数生成课节")
+                        }
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "课节列表",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = "共 ${uiState.periods.size} 节",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            // Each period is its own bordered card, matching the course editor's session cards.
+            itemsIndexed(uiState.periods) { index, period ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    ),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Box(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "课节 ${index + 1}",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                            }
+                            IconButton(onClick = { viewModel.removePeriod(index) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "删除课节",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                        )
+
                         // Editable so a gap in the numbering can be filled: the app only asks the user
                         // to complete a schedule, it must not force them to delete and re-add rows to
                         // reach a number in the middle.
                         OutlinedTextField(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             value = period.periodNumber,
                             onValueChange = { viewModel.onPeriodNumberChange(index, it) },
                             label = { Text("节次") },
@@ -300,35 +447,37 @@ fun ScheduleEditorScreen(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true
                         )
-                        IconButton(onClick = { viewModel.removePeriod(index) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除课节")
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                modifier = Modifier.weight(1f),
+                                value = period.startTime,
+                                onValueChange = { viewModel.onPeriodStartTimeChange(index, it) },
+                                label = { Text("开始") },
+                                placeholder = { Text("08:00") },
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                modifier = Modifier.weight(1f),
+                                value = period.endTime,
+                                onValueChange = { viewModel.onPeriodEndTimeChange(index, it) },
+                                label = { Text("结束") },
+                                placeholder = { Text("08:45") },
+                                singleLine = true
+                            )
                         }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            modifier = Modifier.weight(1f),
-                            value = period.startTime,
-                            onValueChange = { viewModel.onPeriodStartTimeChange(index, it) },
-                            label = { Text("开始") },
-                            placeholder = { Text("08:00") },
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            modifier = Modifier.weight(1f),
-                            value = period.endTime,
-                            onValueChange = { viewModel.onPeriodEndTimeChange(index, it) },
-                            label = { Text("结束") },
-                            placeholder = { Text("08:45") },
-                            singleLine = true
-                        )
                     }
                 }
             }
 
             item {
-                OutlinedButton(onClick = viewModel::addPeriod) {
+                OutlinedButton(
+                    onClick = viewModel::addPeriod,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
                     Icon(Icons.Default.Add, contentDescription = null)
-                    Text("添加课节", modifier = Modifier.padding(start = 4.dp))
+                    Text("添加课节", modifier = Modifier.padding(start = 6.dp))
                 }
             }
         }

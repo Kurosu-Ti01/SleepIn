@@ -15,14 +15,18 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -65,6 +69,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -81,11 +86,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -246,10 +253,14 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            SettingsSectionCard(title = "通知") {
+            SettingsSectionCard(
+                title = "通知",
+                sectionIcon = Icons.Outlined.NotificationsActive
+            ) {
                 SettingsSwitchRow(
                     leadingIcon = Icons.Outlined.NotificationsActive,
                     title = "开启上课提醒",
+                    subtitle = "在每节课开始前定时推送提醒通知",
                     checked = uiState.settings.notificationsEnabled,
                     onCheckedChange = { enabled ->
                         if (enabled && shouldRequestExactAlarmPermission(alarmManager)) {
@@ -264,29 +275,33 @@ fun SettingsScreen(
                 SettingsClickableRow(
                     leadingIcon = Icons.Outlined.Alarm,
                     title = "精确闹钟授权",
+                    subtitle = "保障提醒准时送达",
                     valueText = if (exactAlarmGranted) "已授权" else "未授权",
-                    valueColor = if (exactAlarmGranted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    valueColor = if (exactAlarmGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     onClick = { context.openExactAlarmSettings(exactAlarmPermissionLauncher::launch) }
                 )
                 SettingsClickableRow(
                     leadingIcon = Icons.Outlined.Notifications,
                     title = "通知权限",
+                    subtitle = "允许系统状态栏弹出通知",
                     valueText = if (notificationReady) "已开启" else "未开启",
-                    valueColor = if (notificationReady) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    valueColor = if (notificationReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     onClick = { context.openNotificationSettings(settingsPageLauncher::launch) }
                 )
                 SettingsClickableRow(
                     leadingIcon = Icons.Outlined.BatterySaver,
                     title = "电池优化白名单",
+                    subtitle = "防止系统休眠清理提醒任务",
                     valueText = if (batteryOptimizationIgnored) "已加入" else "未加入",
-                    valueColor = if (batteryOptimizationIgnored) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    valueColor = if (batteryOptimizationIgnored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     onClick = { context.openBatteryOptimizationSettings(settingsPageLauncher::launch) }
                 )
                 SettingsClickableRow(
                     leadingIcon = Icons.Outlined.Settings,
                     title = "后台运行限制",
+                    subtitle = "查看应用后台活动状态",
                     valueText = if (backgroundRestricted) "受限" else "正常",
-                    valueColor = if (backgroundRestricted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    valueColor = if (backgroundRestricted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     onClick = { context.openAutoStartSettings(settingsPageLauncher::launch) }
                 )
                 SettingsInfoTextRow(
@@ -294,7 +309,7 @@ fun SettingsScreen(
                     text = "提示：不同厂商的后台和自启动入口位置不同，若未跳到目标页可在系统设置中手动搜索。",
                     textStyle = MaterialTheme.typography.bodySmall
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsGroupDivider()
                 SettingsValueRow(
                     leadingIcon = Icons.Outlined.Schedule,
                     title = "距离上课还有",
@@ -302,7 +317,10 @@ fun SettingsScreen(
                 )
                 // Keep quick-select chips in one horizontal line across screen sizes.
                 Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 48.dp)
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(5, 10, 15, 20, 30).forEach { minutes ->
@@ -313,23 +331,34 @@ fun SettingsScreen(
                         )
                     }
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsGroupDivider()
                 SettingsSwitchRow(
                     leadingIcon = Icons.Outlined.AutoAwesome,
                     title = "启用灵动岛通知（未实现）",
+                    subtitle = "实验性实况流体云通知展示",
                     checked = uiState.settings.fluidCloudEnabled,
                     enabled = false,
                     onCheckedChange = viewModel::setFluidCloudEnabled
                 )
             }
 
-            SettingsSectionCard(title = "外观") {
-                SettingsInfoTextRow(
+            SettingsSectionCard(
+                title = "外观",
+                sectionIcon = Icons.Outlined.Palette
+            ) {
+                SettingsValueRow(
                     leadingIcon = Icons.Outlined.Palette,
-                    text = "主题模式",
-                    textStyle = MaterialTheme.typography.bodyMedium
+                    title = "主题模式",
+                    valueText = when (uiState.settings.themeMode) {
+                        ThemeMode.SYSTEM -> "跟随系统"
+                        ThemeMode.LIGHT -> "浅色"
+                        ThemeMode.DARK -> "深色"
+                    }
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.padding(start = 48.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     ThemeMode.entries.forEach { mode ->
                         FilterChip(
                             selected = uiState.settings.themeMode == mode,
@@ -346,14 +375,15 @@ fun SettingsScreen(
                         )
                     }
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsGroupDivider()
                 SettingsSwitchRow(
                     leadingIcon = Icons.Outlined.ColorLens,
                     title = "启用动态取色",
+                    subtitle = "跟随系统壁纸自动生成 Material You 配色",
                     checked = uiState.settings.dynamicColorEnabled,
                     onCheckedChange = viewModel::setDynamicColorEnabled
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsGroupDivider()
                 SettingsValueRow(
                     leadingIcon = Icons.Outlined.Height,
                     title = "课程卡片高度",
@@ -362,18 +392,23 @@ fun SettingsScreen(
                 Slider(
                     value = uiState.settings.courseCellHeightDp.toFloat(),
                     onValueChange = { viewModel.setCourseCellHeightDp(it.toInt()) },
-                    valueRange = 44f..120f
+                    valueRange = 44f..120f,
+                    modifier = Modifier.padding(start = 48.dp, end = 8.dp)
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsGroupDivider()
                 SettingsSwitchRow(
                     leadingIcon = Icons.Outlined.ViewWeek,
                     title = "显示非本周课程",
+                    subtitle = "在空闲节次半透明展示其他周次的课程",
                     checked = uiState.settings.showNonCurrentWeekCourses,
                     onCheckedChange = viewModel::setShowNonCurrentWeekCourses
                 )
             }
 
-            SettingsSectionCard(title = "小组件") {
+            SettingsSectionCard(
+                title = "小组件",
+                sectionIcon = Icons.Outlined.Widgets
+            ) {
                 // Snackbar text shared by both pin rows when the launcher rejects pin requests.
                 val pinUnsupportedMessage =
                     "当前桌面不支持一键添加，请长按桌面空白处，在小组件列表中手动添加"
@@ -392,6 +427,7 @@ fun SettingsScreen(
                 SettingsClickableRow(
                     leadingIcon = Icons.Outlined.Today,
                     title = "今日课程小组件",
+                    subtitle = "在主屏幕展示当天待上课程",
                     valueText = "添加到桌面",
                     valueColor = MaterialTheme.colorScheme.primary,
                     onClick = { requestPin(TodayWidgetReceiver::class.java) }
@@ -399,33 +435,47 @@ fun SettingsScreen(
                 SettingsClickableRow(
                     leadingIcon = Icons.Outlined.ViewWeek,
                     title = "周课表小组件",
+                    subtitle = "在主屏幕纵览整周排课表",
                     valueText = "添加到桌面",
                     valueColor = MaterialTheme.colorScheme.primary,
                     onClick = { requestPin(WeekWidgetReceiver::class.java) }
                 )
             }
 
-            SettingsSectionCard(title = "教务导入") {
+            SettingsSectionCard(
+                title = "教务导入",
+                sectionIcon = Icons.Outlined.Code
+            ) {
                 SettingsInfoTextRow(
                     leadingIcon = Icons.Outlined.Info,
                     text = "从本地或远程方案源拉取学校 SleepIn 导入方案",
                     textStyle = MaterialTheme.typography.bodySmall
                 )
+                // Presets and sources are highlighted as primary navigation entries.
+                SettingsClickableRow(
+                    leadingIcon = Icons.Outlined.Code,
+                    title = "导入课程表",
+                    subtitle = "导入教务课表或管理解析方案",
+                    valueText = "前往",
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    onClick = onNavigateToImportPresets
+                )
                 SettingsClickableRow(
                     leadingIcon = Icons.Outlined.Language,
                     title = "方案源",
+                    subtitle = "配置远程或本地规则仓库",
                     valueText = "编辑",
                     valueColor = MaterialTheme.colorScheme.primary,
                     onClick = onNavigateToImportSources
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsGroupDivider()
                 SettingsSwitchRow(
                     leadingIcon = Icons.Outlined.Update,
                     title = "自动更新方案源",
+                    subtitle = "定期同步最新的高校教务适配脚本",
                     checked = uiState.settings.importSourceAutoRefreshEnabled,
                     onCheckedChange = viewModel::setImportSourceAutoRefreshEnabled
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 SettingsValueRow(
                     leadingIcon = Icons.Outlined.Schedule,
                     title = "更新周期",
@@ -433,7 +483,10 @@ fun SettingsScreen(
                 )
                 // Same chip-row pattern as the reminder lead time, so the screen stays consistent.
                 Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 48.dp)
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     IMPORT_SOURCE_INTERVAL_CHOICES.forEach { days ->
@@ -445,7 +498,7 @@ fun SettingsScreen(
                         )
                     }
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsGroupDivider()
                 SettingsValueRow(
                     leadingIcon = Icons.Outlined.Update,
                     title = "上次更新",
@@ -465,31 +518,29 @@ fun SettingsScreen(
                         }
                     )
                 }
-                OutlinedButton(
-                    onClick = viewModel::refreshImportSourceNow,
-                    enabled = !uiState.isRefreshingImportSource
-                ) {
-                    Text(if (uiState.isRefreshingImportSource) "更新中..." else "立即更新")
+                Row(modifier = Modifier.padding(start = 48.dp)) {
+                    OutlinedButton(
+                        onClick = viewModel::refreshImportSourceNow,
+                        enabled = !uiState.isRefreshingImportSource
+                    ) {
+                        Text(if (uiState.isRefreshingImportSource) "更新中..." else "立即更新")
+                    }
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                // Presets sit next to the sources that provide them, so the two entries are not split
-                // across cards the user has to look for separately.
-                SettingsClickableRow(
-                    leadingIcon = Icons.Outlined.Code,
-                    title = "导入课程表",
-                    valueText = "导入课程表或管理导入方案",
-                    valueColor = MaterialTheme.colorScheme.primary,
-                    onClick = onNavigateToImportPresets
-                )
             }
 
-            SettingsSectionCard(title = "数据") {
+            SettingsSectionCard(
+                title = "数据",
+                sectionIcon = Icons.Outlined.Backup
+            ) {
                 SettingsInfoTextRow(
                     leadingIcon = Icons.Outlined.Backup,
                     text = "设置备份仅包含应用偏好配置，不包括课程表与方案源。",
                     textStyle = MaterialTheme.typography.bodyMedium
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.padding(start = 48.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     OutlinedButton(onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*")) }) {
                         Text("导入备份")
                     }
@@ -499,15 +550,19 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsSectionCard(title = "更新") {
+            SettingsSectionCard(
+                title = "更新",
+                sectionIcon = Icons.Outlined.SystemUpdate
+            ) {
                 val updateError = uiState.settings.lastUpdateCheckError
                 SettingsSwitchRow(
                     leadingIcon = Icons.Outlined.Update,
                     title = "自动检查更新",
+                    subtitle = "启动时检查 GitHub Release 新版本",
                     checked = uiState.settings.autoCheckUpdateEnabled,
                     onCheckedChange = viewModel::setAutoCheckUpdateEnabled
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsGroupDivider()
                 SettingsValueRow(
                     leadingIcon = Icons.Outlined.SystemUpdate,
                     title = "更新状态",
@@ -531,7 +586,10 @@ fun SettingsScreen(
                         }
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.padding(start = 48.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     OutlinedButton(
                         onClick = viewModel::checkForUpdates,
                         enabled = !uiState.isCheckingUpdate
@@ -560,22 +618,27 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsSectionCard(title = "关于") {
+            SettingsSectionCard(
+                title = "关于",
+                sectionIcon = Icons.Outlined.Info
+            ) {
                 SettingsClickableRow(
                     leadingIcon = Icons.Outlined.Language,
                     title = "项目网站",
-                    valueText = "sleepin.kurosu.qzz.io",
+                    subtitle = "在线访问指南与开发文档\nsleepin.kurosu.qzz.io",
+                    valueText = "访问",
                     valueColor = MaterialTheme.colorScheme.primary,
                     onClick = { context.openUrl("https://sleepin.kurosu.qzz.io/") }
                 )
                 SettingsClickableRow(
                     leadingIcon = Icons.Outlined.Code,
                     title = "GitHub",
-                    valueText = "Kurosu-Ti01/SleepIn",
+                    subtitle = "查看源码与提交问题反馈\nKurosu-Ti01/SleepIn",
+                    valueText = "访问",
                     valueColor = MaterialTheme.colorScheme.primary,
                     onClick = { context.openUrl("https://github.com/Kurosu-Ti01/SleepIn") }
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SettingsGroupDivider()
                 SettingsValueRow(
                     leadingIcon = Icons.Outlined.Info,
                     title = "当前版本",
@@ -623,10 +686,15 @@ fun SettingsScreen(
 @Composable
 private fun SettingsSectionCard(
     title: String,
+    sectionIcon: ImageVector? = null,
     content: @Composable () -> Unit
 ) {
     Card(
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
@@ -634,46 +702,113 @@ private fun SettingsSectionCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Primary-tinted section label is the conventional M3 settings grouping cue.
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            // Primary-tinted section label with an optional icon chip for M3 visual hierarchy.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 4.dp)
+            ) {
+                if (sectionIcon != null) {
+                    Icon(
+                        imageVector = sectionIcon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             content()
         }
     }
 }
 
 /**
- * Reusable settings row with text at start and switch at end.
+ * Tonal rounded badge for leading icons inside settings rows.
+ */
+@Composable
+private fun SettingsIconBadge(
+    icon: ImageVector,
+    containerColor: Color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
+    contentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer
+) {
+    Surface(
+        modifier = Modifier.size(36.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Indented subtle divider that separates sub-groups without cutting across the icon column.
+ */
+@Composable
+private fun SettingsGroupDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 48.dp, top = 4.dp, bottom = 4.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    )
+}
+
+/**
+ * Reusable settings row with leading icon badge, title/subtitle, and switch at end.
  */
 @Composable
 private fun SettingsSwitchRow(
     leadingIcon: ImageVector,
     title: String,
+    subtitle: String? = null,
     checked: Boolean,
     enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
+            .padding(vertical = 6.dp, horizontal = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f).padding(end = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = leadingIcon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(text = title, style = MaterialTheme.typography.bodyMedium)
+            SettingsIconBadge(icon = leadingIcon)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
         Switch(
             checked = checked,
@@ -684,12 +819,13 @@ private fun SettingsSwitchRow(
 }
 
 /**
- * Reusable settings row that is fully clickable.
+ * Reusable settings row that is fully clickable with a rounded ripple and trailing status pill.
  */
 @Composable
 private fun SettingsClickableRow(
     leadingIcon: ImageVector,
     title: String,
+    subtitle: String? = null,
     valueText: String,
     valueColor: Color,
     onClick: () -> Unit
@@ -697,27 +833,48 @@ private fun SettingsClickableRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp, horizontal = 4.dp), // Increase padding for better touch target
+            .padding(vertical = 8.dp, horizontal = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f).padding(end = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = leadingIcon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(text = title, style = MaterialTheme.typography.bodyMedium)
+            SettingsIconBadge(icon = leadingIcon)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = valueText, style = MaterialTheme.typography.bodySmall, color = valueColor)
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = valueColor.copy(alpha = 0.12f)
+            ) {
+                Text(
+                    text = valueText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = valueColor,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "跳转",
@@ -739,26 +896,32 @@ private fun SettingsValueRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = 6.dp, horizontal = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = leadingIcon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            SettingsIconBadge(icon = leadingIcon)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
             )
-            Text(text = title, style = MaterialTheme.typography.bodyMedium)
         }
-        Text(
-            text = valueText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
     }
 }
 
@@ -771,23 +934,30 @@ private fun SettingsInfoTextRow(
     text: String,
     textStyle: androidx.compose.ui.text.TextStyle
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.6f),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Icon(
-            imageVector = leadingIcon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = text,
-            style = textStyle,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = text,
+                style = textStyle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -813,17 +983,18 @@ private fun SettingsCopyableMessageRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = leadingIcon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
+                SettingsIconBadge(
+                    icon = leadingIcon,
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
                 )
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.error
                 )
             }
@@ -840,7 +1011,7 @@ private fun SettingsCopyableMessageRow(
                 text = valueText,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 32.dp)
+                modifier = Modifier.padding(start = 48.dp)
             )
         }
     }

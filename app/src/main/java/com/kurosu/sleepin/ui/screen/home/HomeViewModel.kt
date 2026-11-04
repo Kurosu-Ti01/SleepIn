@@ -219,6 +219,35 @@ class HomeViewModel(
                     null
                 }
 
+                val weekPages = if (active == null) {
+                    emptyMap()
+                } else {
+                    (1..totalWeeks).associateWith { weekNumber ->
+                        val isThisCurrentWeek = semesterInfo?.progress == SemesterProgress.IN_PROGRESS &&
+                            semesterInfo.currentWeek == weekNumber
+                        val pageTodayColumnIndex = if (isThisCurrentWeek) {
+                            currentDateTime.dayOfWeek.value - 1
+                        } else {
+                            null
+                        }
+                        HomeWeekPageUi(
+                            weekNumber = weekNumber,
+                            weekDates = buildWeekDates(active.startDate, weekNumber),
+                            courses = buildVisibleCourseCells(
+                                source = payload.courses,
+                                week = weekNumber,
+                                showNonCurrentWeekCourses = settings.showNonCurrentWeekCourses
+                            ),
+                            todayColumnIndex = pageTodayColumnIndex,
+                            currentTimePeriodOffset = if (pageTodayColumnIndex != null) {
+                                resolveCurrentTimeRowOffset(periodRows, currentDateTime.toLocalTime())
+                            } else {
+                                null
+                            }
+                        )
+                    }
+                }
+
                 val scheduleNameMap = schedules.associate { it.id to it.name }
                 HomeUiState(
                     isLoading = false,
@@ -237,6 +266,7 @@ class HomeViewModel(
                     courses = visibleCourses,
                     todayColumnIndex = todayColumnIndex,
                     currentTimePeriodOffset = currentTimeOffset,
+                    weekPages = weekPages,
                     semesterStatusMessage = when (semesterInfo?.progress) {
                         SemesterProgress.BEFORE_START -> "学期未开始"
                         SemesterProgress.AFTER_END -> "学期已结束"
@@ -432,6 +462,17 @@ data class HomeCourseCellUi(
 )
 
 /**
+ * Precomputed snapshot for a single semester week inside the horizontal pager.
+ */
+data class HomeWeekPageUi(
+    val weekNumber: Int,
+    val weekDates: List<LocalDate>,
+    val courses: List<HomeCourseCellUi>,
+    val todayColumnIndex: Int?,
+    val currentTimePeriodOffset: Float?
+)
+
+/**
  * Home screen state consumed by top app bar and menu sheet.
  */
 data class HomeUiState(
@@ -461,6 +502,7 @@ data class HomeUiState(
     val courses: List<HomeCourseCellUi> = emptyList(),
     val todayColumnIndex: Int? = null,
     val currentTimePeriodOffset: Float? = null,
+    val weekPages: Map<Int, HomeWeekPageUi> = emptyMap(),
     val semesterStatusMessage: String? = null,
     val todayDateText: String = ""
 )

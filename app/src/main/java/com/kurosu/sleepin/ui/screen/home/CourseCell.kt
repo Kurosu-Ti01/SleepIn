@@ -48,15 +48,19 @@ fun CourseCell(
     }
 
     Card(
-        modifier = modifier.clickable { onClick(cell) },
-        shape = RoundedCornerShape(6.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor)
+        onClick = { onClick(cell) },
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (cell.isCurrentWeek) 1.dp else 0.dp
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 // Keep inner padding minimal so narrow columns can still show several CJK characters.
-                .padding(horizontal = 2.dp, vertical = 3.dp),
+                .padding(horizontal = 3.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             if (!cell.isCurrentWeek) {

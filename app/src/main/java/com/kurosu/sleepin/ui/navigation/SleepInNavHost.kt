@@ -1,5 +1,13 @@
 package com.kurosu.sleepin.ui.navigation
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.EaseInOutCubic
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -52,7 +60,39 @@ fun SleepInNavHost(
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route,
-        modifier = modifier
+        modifier = modifier,
+        enterTransition = {
+            slideInHorizontally(
+                initialOffsetX = { fullWidth -> (fullWidth * 0.15f).toInt() },
+                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
+            ) + fadeIn(
+                animationSpec = tween(durationMillis = 240, easing = EaseInOutCubic)
+            )
+        },
+        exitTransition = {
+            slideOutHorizontally(
+                targetOffsetX = { fullWidth -> -(fullWidth * 0.15f).toInt() },
+                animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+            ) + fadeOut(
+                animationSpec = tween(durationMillis = 200, easing = EaseInOutCubic)
+            )
+        },
+        popEnterTransition = {
+            slideInHorizontally(
+                initialOffsetX = { fullWidth -> -(fullWidth * 0.15f).toInt() },
+                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
+            ) + fadeIn(
+                animationSpec = tween(durationMillis = 240, easing = EaseInOutCubic)
+            )
+        },
+        popExitTransition = {
+            slideOutHorizontally(
+                targetOffsetX = { fullWidth -> (fullWidth * 0.15f).toInt() },
+                animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing)
+            ) + fadeOut(
+                animationSpec = tween(durationMillis = 200, easing = EaseInOutCubic)
+            )
+        }
     ) {
         composable(Screen.Home.route) {
             val vm: HomeViewModel = viewModel(
