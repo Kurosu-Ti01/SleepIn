@@ -8,31 +8,27 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
+import com.kurosu.sleepin.domain.model.AppReleaseInfo
 import com.kurosu.sleepin.domain.model.AppSettings
 import com.kurosu.sleepin.domain.model.ThemeMode
+import com.kurosu.sleepin.ui.component.update.UpdateAvailableDialog
 import com.kurosu.sleepin.ui.navigation.SleepInNavHost
 import com.kurosu.sleepin.ui.theme.SleepInTheme
 import com.kurosu.sleepin.update.ApkDownloadManager
+import com.kurosu.sleepin.update.DebugUpdateSimulator
 import kotlinx.coroutines.launch
 
 /**
@@ -73,10 +69,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val shouldShowUpdateDialog = settings.updateAvailable &&
-                settings.latestApkDownloadUrl.isNotBlank() &&
-                settings.latestRemoteVersion.isNotBlank() &&
-                settings.latestRemoteVersion != settings.dismissedUpdateVersion
+            // Debug builds can render the dialog with a built-in sample instead of waiting for a
+            // GitHub release newer than the installed version. Nothing is persisted in this mode.
+            val simulatedRelease by if (BuildConfig.DEBUG) {
+                DebugUpdateSimulator.simulatedRelease.collectAsStateWithLifecycle()
+            } else {
+                remember { mutableStateOf<AppReleaseInfo?>(null) }
+            }
+            val pendingUpdateRelease = simulatedRelease ?: settings.pendingUpdateRelease()
 
             SleepInTheme(
                 darkTheme = when (settings.themeMode) {
@@ -94,20 +94,30 @@ class MainActivity : ComponentActivity() {
                         appSettings = settings
                     )
 
-                    if (shouldShowUpdateDialog) {
+                    if (pendingUpdateRelease != null) {
                         UpdateAvailableDialog(
-                            versionTag = settings.latestRemoteVersion,
-                            releaseNotes = settings.latestReleaseNotes,
+                            versionTag = pendingUpdateRelease.versionTag,
+                            releaseNotes = pendingUpdateRelease.releaseNotes,
+                            releasePageUrl = pendingUpdateRelease.releasePageUrl,
                             onDismiss = {
-                                acknowledgeUpdateDialog(app, settings)
+                                if (simulatedRelease != null) {
+                                    DebugUpdateSimulator.setEnabled(false)
+                                } else {
+                                    acknowledgeUpdateDialog(app, settings)
+                                }
                             },
                             onDownload = {
-                                ApkDownloadManager.enqueueApkDownload(
-                                    context = this,
-                                    downloadUrl = settings.latestApkDownloadUrl,
-                                    versionTag = settings.latestRemoteVersion
-                                )
-                                acknowledgeUpdateDialog(app, settings)
+                                if (simulatedRelease != null) {
+                                    // The sample carries no APK; closing beats a broken download.
+                                    DebugUpdateSimulator.setEnabled(false)
+                                } else {
+                                    ApkDownloadManager.enqueueApkDownload(
+                                        context = this,
+                                        downloadUrl = settings.latestApkDownloadUrl,
+                                        versionTag = settings.latestRemoteVersion
+                                    )
+                                    acknowledgeUpdateDialog(app, settings)
+                                }
                             }
                         )
                     }
@@ -121,38 +131,27 @@ class MainActivity : ComponentActivity() {
             app.updateSettingsUseCase(settings.copy(dismissedUpdateVersion = settings.latestRemoteVersion))
         }
     }
-}
 
-/**
- * Dialog shown once per detected version to present release notes and quick download action.
- */
-@androidx.compose.runtime.Composable
-private fun UpdateAvailableDialog(
-    versionTag: String,
-    releaseNotes: String,
-    onDismiss: () -> Unit,
-    onDownload: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("发现新版本 $versionTag") },
-        text = {
-            Text(
-                text = releaseNotes.ifBlank { "该版本未提供 Release Note。" },
-                modifier = Modifier
-                    .heightIn(max = 300.dp)
-                    .verticalScroll(rememberScrollState())
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onDownload) {
-                Text("下载更新")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("稍后")
-            }
-        }
-    )
+    /**
+     * Maps persisted update state to the dialog payload, or `null` when no dialog should be shown.
+     *
+     * A version the user already dismissed stays dismissed: the update check keeps
+     * `dismissedUpdateVersion` equal to the remote tag, so the dialog does not reappear on every
+     * launch.
+     */
+    private fun AppSettings.pendingUpdateRelease(): AppReleaseInfo? {
+        val shouldShowDialog = updateAvailable &&
+            latestApkDownloadUrl.isNotBlank() &&
+            latestRemoteVersion.isNotBlank() &&
+            latestRemoteVersion != dismissedUpdateVersion
+        if (!shouldShowDialog) return null
+
+        return AppReleaseInfo(
+            versionTag = latestRemoteVersion,
+            releaseName = latestRemoteVersion,
+            releaseNotes = latestReleaseNotes,
+            apkDownloadUrl = latestApkDownloadUrl,
+            releasePageUrl = latestReleasePageUrl
+        )
+    }
 }

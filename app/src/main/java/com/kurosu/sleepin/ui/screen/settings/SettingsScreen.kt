@@ -37,6 +37,8 @@ import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.BatterySaver
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -103,6 +105,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kurosu.sleepin.BuildConfig
 import com.kurosu.sleepin.domain.model.ThemeMode
 import com.kurosu.sleepin.update.ApkDownloadManager
+import com.kurosu.sleepin.update.DebugUpdateSimulator
 import com.kurosu.sleepin.widget.TodayWidgetReceiver
 import com.kurosu.sleepin.widget.WeekWidgetReceiver
 import kotlinx.coroutines.launch
@@ -645,6 +648,10 @@ fun SettingsScreen(
                     valueText = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
                 )
             }
+
+            if (BuildConfig.DEBUG) {
+                DebugUpdateSimulationCard()
+            }
         }
     }
 
@@ -671,6 +678,30 @@ fun SettingsScreen(
                     Text("暂不")
                 }
             }
+        )
+    }
+}
+
+/**
+ * Debug-build only card that toggles the update-dialog simulation.
+ *
+ * The switch state is read from [DebugUpdateSimulator] rather than kept locally, so the card stays in
+ * sync when the dialog itself closes the simulation ("稍后" / "下载更新" both just switch it off in
+ * this mode).
+ */
+@Composable
+private fun DebugUpdateSimulationCard() {
+    val simulatedRelease by DebugUpdateSimulator.simulatedRelease.collectAsStateWithLifecycle()
+    SettingsSectionCard(
+        title = "调试",
+        sectionIcon = Icons.Outlined.Build
+    ) {
+        SettingsSwitchRow(
+            leadingIcon = Icons.Outlined.BugReport,
+            title = "模拟更新弹窗",
+            subtitle = "用内置样本 Release Note 弹出更新提示：不读写设置，也不会真的下载 APK",
+            checked = simulatedRelease != null,
+            onCheckedChange = DebugUpdateSimulator::setEnabled
         )
     }
 }
