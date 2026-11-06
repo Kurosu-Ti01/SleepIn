@@ -1,5 +1,6 @@
 ---
 title: 从这里开始
+icon: mdi:flag-outline
 createTime: 2026/03/20
 permalink: /dev/
 ---

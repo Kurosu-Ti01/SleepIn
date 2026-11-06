@@ -18,7 +18,7 @@ import { enNavbar, zhNavbar } from './navbar'
  * @see https://theme-plume.vuejs.press/config/theme/
  */
 export default defineThemeConfig({
-  logo: 'https://theme-plume.vuejs.press/plume.png',
+  logo: '/SleepIn.png',
 
   appearance: true,  // 配置 深色模式
 
@@ -49,7 +49,7 @@ export default defineThemeConfig({
   transition: {
     page: true,        // 启用 页面间跳转过渡动画
     postList: true,    // 启用 博客文章列表过渡动画
-    appearance: 'fade',  // 启用 深色模式切换过渡动画, 或配置过渡动画类型
+    appearance: 'circle-clip',  // 深色模式切换过渡动画(圆形扩散)
   },
 
   locales: {
@@ -58,7 +58,7 @@ export default defineThemeConfig({
        * @see https://theme-plume.vuejs.press/config/theme/#profile
        */
       profile: {
-        avatar: 'https://theme-plume.vuejs.press/plume.png',
+        avatar: '/SleepIn.png',
         name: 'SleepIn',
         description: 'SleepIn 文档主页',
         // circle: true,
@@ -85,7 +85,7 @@ export default defineThemeConfig({
        * @see https://theme-plume.vuejs.press/config/theme/#profile
        */
       profile: {
-        avatar: 'https://theme-plume.vuejs.press/plume.png',
+        avatar: '/SleepIn.png',
         name: 'SleepIn',
         description: 'Docs for SleepIn',
         // circle: true,

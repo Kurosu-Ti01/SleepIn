@@ -31,7 +31,7 @@ export default defineUserConfig({
 
   head: [
     // 配置站点图标
-    ['link', { rel: 'icon', type: 'image/png', href: 'https://theme-plume.vuejs.press/favicon-32x32.png' }],
+    ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
   ],
 
   bundler: viteBundler(),
@@ -87,14 +87,16 @@ export default defineUserConfig({
      * Shiki 代码高亮
      * @see https://theme-plume.vuejs.press/config/plugins/code-highlight/
      */
-    // codeHighlighter: {
-    //   twoslash: true, // 启用 twoslash
-    //   whitespace: true, // 启用 空格/Tab 高亮
-    //   lineNumbers: true, // 启用行号
-    // },
+    codeHighlighter: {
+      lineNumbers: 10,        // 代码块行数不少于 10 行时显示行号
+      renderIndentGuides: true, // 显示缩进指示线
+      colorizedBrackets: true,  // 括号配对着色
+      // twoslash: true,        // 启用 twoslash（需安装 @vuepress/shiki-twoslash）
+      // whitespace: true,      // 启用 空格/Tab 高亮
+    },
 
     /* 文章字数统计、阅读时间，设置为 false 则禁用 */
-    // readingTime: true,
+    readingTime: true,
 
     /**
      * markdown

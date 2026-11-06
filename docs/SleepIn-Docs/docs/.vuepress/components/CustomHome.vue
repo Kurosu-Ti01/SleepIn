@@ -1,6 +1,18 @@
 <template>
   <div class="custom-home">
     <div class="hero">
+      <!-- 动画背景：跟随鼠标的网格点，颜色读取主题品牌色与分割线颜色 -->
+      <div class="hero-effect" aria-hidden="true">
+        <DotGrid
+          :dot-size="4"
+          :gap="20"
+          :proximity="150"
+          :speed-trigger="120"
+          :shock-radius="240"
+          :shock-strength="6"
+        />
+      </div>
+
       <div class="hero-content">
         <img src="/SleepIn.png" alt="SleepIn Logo" class="logo" no-view />
         <h1 class="title">{{ content.title }}</h1>
@@ -10,9 +22,18 @@
         <p v-if="content.localeNotice" class="locale-note">{{ content.localeNotice }}</p>
 
         <div class="actions">
-          <a :href="links.start" class="action-btn alt">{{ content.startBtn }}</a>
-          <a :href="links.download" class="action-btn brand">{{ content.downloadBtn }}</a>
-          <a :href="links.dev" class="action-btn alt">{{ content.devBtn }}</a>
+          <a :href="links.start" class="action-btn alt">
+            <VPIconify class="action-icon" name="mdi:book-open-variant" />
+            <span>{{ content.startBtn }}</span>
+          </a>
+          <a :href="links.download" class="action-btn brand">
+            <VPIconify class="action-icon" name="mdi:download" />
+            <span>{{ content.downloadBtn }}</span>
+          </a>
+          <a :href="links.dev" class="action-btn alt">
+            <VPIconify class="action-icon" name="mdi:code-braces" />
+            <span>{{ content.devBtn }}</span>
+          </a>
         </div>
       </div>
 
@@ -27,19 +48,14 @@
         </div>
       </div>
     </div>
-
-    <div class="features">
-      <div v-for="(feature, index) in content.features" :key="index" class="feature-card">
-        <h3>{{ feature.title }}</h3>
-        <p>{{ feature.desc }}</p>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
   import { useRoute } from 'vue-router'
-  import { computed } from 'vue'
+  import { computed, nextTick, onMounted } from 'vue'
+  import DotGrid from 'vuepress-theme-plume/components/background/DotGrid.vue'
+  import VPIconify from 'vuepress-theme-plume/components/VPIconify.vue'
 
   const route = useRoute()
   const isEn = computed(() => route.path.startsWith('/en/'))
@@ -53,14 +69,6 @@
       startBtn: 'Getting Started',
       downloadBtn: 'Download APK',
       devBtn: 'Developer Guide',
-      features: [
-        { title: '🎒 Easy Import', desc: 'Effortlessly import schedules from your university system, no more manual entries.' },
-        { title: '🎨 Beautiful & Intuitive', desc: 'Follows Material Design 3 and dynamic colors for the most elegant user experience.' },
-        { title: '🧩 Widgets Support', desc: 'Desktop widgets allow you to glance at your schedule without opening the app.' },
-        { title: '⏰ Class Reminder', desc: 'Receive notifications before class starts, so you never miss important lectures.' },
-        { title: '💾 Quick Backup', desc: 'Back up and restore timetable data quickly to migrate between devices with ease.' },
-        { title: '🛡️ Local Privacy', desc: 'Your data is always stored locally, open-source and transparent for your safety.' }
-      ]
     } : {
       title: 'SleepIn 课程表',
       tagline: '更实用 · 更简洁 · 更美观',
@@ -69,14 +77,6 @@
       startBtn: '使用文档',
       downloadBtn: '下载最新版本',
       devBtn: '开发文档',
-      features: [
-        { title: '🎒 课程导入', desc: '轻松导入教务系统 CSV 课表，告别繁琐的手动输入。' },
-        { title: '🎨 美观直观', desc: '使用 Material Design 3 现代化 UI，支持系统动态色彩，呈现最优雅的界面。' },
-        { title: '🧩 小部件支持', desc: '提供多样化的桌面小部件，无需打开应用即可快速一瞥今天的日程安排。' },
-        { title: '⏰ 课前提醒', desc: '支持课前提醒，在上课前按时通知，帮助你不错过每一节重要课程。' },
-        { title: '💾 便捷备份', desc: '一键备份与恢复课表数据，换机迁移更轻松，重要课表不丢失。' },
-        { title: '🛡️ 本地隐私', desc: '您的数据始终储存在设备本地，绝不私自上传云端，完全开源透明。' }
-      ]
     }
   })
 
@@ -91,6 +91,21 @@
       dev: '/dev/'
     }
   })
+
+  /**
+   * 主题的 DotGrid 组件通过 useCssVar 读取 `--vp-c-brand-3` / `--vp-c-divider`，
+   * useCssVar 会把读到的值写回 <html> 的内联样式，而内联样式的优先级高于
+   * `[data-theme="dark"]` 规则，会导致切换深色模式后全站的边框色仍是浅色取值。
+   *
+   * 组件已经把颜色保存进自己的 ref 中，这里在挂载后移除内联覆盖即可，
+   * 深色模式重新由主题的 CSS 变量接管。
+   */
+  onMounted(async () => {
+    await nextTick()
+    const style = document.documentElement.style
+    style.removeProperty('--vp-c-brand-3')
+    style.removeProperty('--vp-c-divider')
+  })
 </script>
 
 
@@ -99,20 +114,49 @@
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 4rem;
   }
 
   /* Hero Section */
   .hero {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 4rem;
+    padding-block: 1rem;
+  }
+
+  /*
+   * 动画背景层。
+   * 宿主容器（.vp-home-box > .container）限定了 max-width，若直接用 inset: 0
+   * 只会得到中间一块矩形；这里用 left: 50% + 100vw + translateX(-50%)
+   * 把背景层横向撑满整个视口，纵向上下各溢出一段盖住容器内边距。
+   * 由此产生的横向溢出由 `.vp-home` 的 `overflow-x: clip` 裁掉，
+   * 参见 theme/styles/custom.css。
+   */
+  .hero-effect {
+    position: absolute;
+    top: -8rem;
+    bottom: -6rem;
+    left: 50%;
+    width: 100vw;
+    transform: translateX(-50%);
+    z-index: 0;
+    pointer-events: none;
+    /* 横向靠视口边缘自然裁切，纵向上下渐隐，避免出现生硬的矩形边界 */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 55%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 55%, transparent 100%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-effect {
+      display: none;
+    }
   }
 
   .hero-content {
+    position: relative;
+    z-index: 1;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -172,12 +216,19 @@
   }
 
   .action-btn {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
     padding: 0.75rem 1.5rem;
     border-radius: 999px;
     font-weight: 600;
     text-decoration: none;
     transition: all 0.25s ease;
+  }
+
+  .action-icon {
+    width: 1.15em;
+    height: 1.15em;
   }
 
   .action-btn.brand {
@@ -204,6 +255,7 @@
 
   /* Hero Image */
   .hero-image {
+    z-index: 1;
     flex: 1;
     display: flex;
     justify-content: center;
@@ -285,42 +337,6 @@
     object-fit: cover;
   }
 
-  /* Features Section */
-  .features {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 2rem;
-    margin-top: 2rem;
-    padding-top: 4rem;
-    border-top: 1px solid var(--vp-c-divider);
-  }
-
-  .feature-card {
-    padding: 1.5rem;
-    border-radius: 1rem;
-    background-color: var(--vp-c-bg-soft);
-    transition: transform 0.25s ease, background-color 0.25s ease;
-  }
-
-  .feature-card:hover {
-    transform: translateY(-5px);
-    background-color: var(--vp-c-bg-mute);
-  }
-
-  .feature-card h3 {
-    font-size: 1.25rem;
-    font-weight: 700;
-    margin: 0 0 1rem 0;
-    color: var(--vp-c-text-1);
-  }
-
-  .feature-card p {
-    font-size: 1rem;
-    line-height: 1.5;
-    color: var(--vp-c-text-2);
-    margin: 0;
-  }
-
   /* Responsive */
   @media (max-width: 960px) {
     .hero {
@@ -355,10 +371,6 @@
 
     .tagline {
       font-size: 1.25rem;
-    }
-
-    .features {
-      grid-template-columns: 1fr;
     }
 
     .device-mockup {

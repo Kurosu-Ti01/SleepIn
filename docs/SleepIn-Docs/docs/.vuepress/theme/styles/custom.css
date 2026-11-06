@@ -92,3 +92,46 @@
   --vp-home-card-shadow: rgba(255, 255, 255, 0.15);
   --vp-home-card-shadow-hover: rgba(255, 255, 255, 0.25);
 }
+
+/**
+ * 首页布局
+ * -------------------------------------------------------------------------- */
+
+/*
+ * 首页首屏的点阵动画背景需要横向铺满视口（宽度 100vw），
+ * 会超出内容容器的最大宽度。这里只在横向做裁切，避免出现横向滚动条；
+ * `clip` 不会创建滚动容器，因此不影响页内的 sticky 元素与纵向滚动。
+ */
+.vp-home {
+  overflow-x: clip;
+}
+
+/**
+ * 深浅模式切换动画
+ * -------------------------------------------------------------------------- */
+
+/*
+ * 两个方向统一为「新主题从切换按钮处圆形展开」：
+ * - 旧快照保留在最下层、不裁切，屏敞主题给它加的收缩动画；
+ * - 新快照在最上层，切到深色时由 client.ts 的 WAAPI 动画扩散。
+ *
+ * 注意：这里不能用 `animation` 驱动扩散 —— 部分 Chromium 环境不会执行挂在
+ * view-transition 伪元素上的 CSS 动画（实测用户环境即如此），故改用 WAAPI。
+ */
+html::view-transition-old(root) {
+  z-index: 1 !important;
+  clip-path: none !important;
+  animation: none !important;
+}
+
+html::view-transition-new(root) {
+  z-index: 2 !important;
+}
+
+/*
+ * 切到深色时，先让新快照完全裁掉，避免动画接管前闪一帧新主题。
+ * 这不是 `!important`，所以会被 WAAPI 动画盖住。
+ */
+html[data-theme="dark"]::view-transition-new(root) {
+  clip-path: circle(0px at var(--vt-origin-x, 100%) var(--vt-origin-y, 0%));
+}
