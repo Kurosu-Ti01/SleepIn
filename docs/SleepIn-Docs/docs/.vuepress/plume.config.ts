@@ -18,7 +18,7 @@ import { enNavbar, zhNavbar } from './navbar'
  * @see https://theme-plume.vuejs.press/config/theme/
  */
 export default defineThemeConfig({
-  logo: '/SleepIn.png',
+  logo: '/favicon.png',
 
   appearance: true,  // 配置 深色模式
 
@@ -58,7 +58,7 @@ export default defineThemeConfig({
        * @see https://theme-plume.vuejs.press/config/theme/#profile
        */
       profile: {
-        avatar: '/SleepIn.png',
+        avatar: '/favicon.png',
         name: 'SleepIn',
         description: 'SleepIn 文档主页',
         // circle: true,
@@ -85,7 +85,7 @@ export default defineThemeConfig({
        * @see https://theme-plume.vuejs.press/config/theme/#profile
        */
       profile: {
-        avatar: '/SleepIn.png',
+        avatar: '/favicon.png',
         name: 'SleepIn',
         description: 'Docs for SleepIn',
         // circle: true,

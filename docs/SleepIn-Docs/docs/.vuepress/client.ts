@@ -17,6 +17,11 @@ let appearanceOrigin = { x: 0, y: 0 }
  * 从未用鼠标点过则退回右上角。
  */
 function trackAppearanceOrigin() {
+  // 该函数在 clientConfig.setup() 中执行，SSG 预渲染阶段（Node 环境）没有 document，
+  // 未拦截会抛出 ReferenceError 并导致整页渲染为空
+  if (typeof document === 'undefined')
+    return
+
   document.addEventListener('click', (event) => {
     const target = event.target as Element | null
     if (!target?.closest?.('.vp-switch-appearance'))
