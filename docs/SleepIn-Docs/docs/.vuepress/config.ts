@@ -20,18 +20,27 @@ export default defineUserConfig({
     '/': {
       title: 'SleepIn',
       lang: 'zh-CN',
-      description: 'Docs for SleepIn',
+      description: 'SleepIn：一款开源 Android 课表应用，在这里看使用指南与开发者文档。',
     },
     '/en/': {
       title: 'SleepIn',
       lang: 'en-US',
-      description: 'Docs for SleepIn',
+      description: 'SleepIn is an open-source Android timetable app. User guides and developer docs.',
     },
   },
 
   head: [
     // 配置站点图标
     ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
+    ['script', { type: 'application/ld+json' },
+      JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'SleepIn',
+        alternateName: ['SleepIn 文档', 'SleepIn Docs'],
+        url: 'https://sleepin.kurosu.qzz.io/',
+      }),
+    ],
   ],
 
   bundler: viteBundler(),
@@ -48,7 +57,7 @@ export default defineUserConfig({
 
     /* 页内信息 */
     editLink: true,
-    lastUpdated: true,
+    lastUpdated: {},
     contributors: true,
     changelog: true,
 
@@ -96,7 +105,7 @@ export default defineUserConfig({
     },
 
     /* 文章字数统计、阅读时间，设置为 false 则禁用 */
-    readingTime: true,
+    readingTime: {},
 
     /**
      * markdown

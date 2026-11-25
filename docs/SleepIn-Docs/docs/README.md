@@ -1,4 +1,5 @@
 ---
+title: SleepIn 文档
 pageLayout: home
 config:
   - type: custom

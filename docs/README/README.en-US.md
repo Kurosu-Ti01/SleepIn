@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://sleepin.kurosu.qzz.io/" target="_blank">
+  <a href="https://sleepin.kurosu.qzz.io/en/" target="_blank">
   <img src="../SleepIn-Docs/docs/.vuepress/public/SleepIn.png" width="256" alt="cover">
   </a>
 
@@ -9,6 +9,7 @@
 
   <p align="center">
     <a href="https://www.gnu.org/licenses/gpl-3.0.en.html" target="_blank"><img alt="Static Badge" src="https://img.shields.io/badge/GPL_3.0-%23BD0000?style=for-the-badge&logo=gplv3&logoColor=FFFFFF&logoSize=auto&label=license"></a>
+    <a href="https://sleepin.kurosu.qzz.io/en/" target="_blank"><img alt="Static Badge" src="https://img.shields.io/badge/docs-%23847CF5?style=for-the-badge&logo=readthedocs&logoColor=%23FFFFFF&logoSize=auto"></a>
     <br>
     <a href="https://developer.android.com/" target="_blank"><img alt="Static Badge" src="https://img.shields.io/badge/android-%233DDC84?style=for-the-badge&logo=android&logoColor=%23FFFFFF&logoSize=auto"></a>
     <a href="https://developer.android.com/compose" target="_blank"><img alt="Static Badge" src="https://img.shields.io/badge/jetpack_compose-%234285F4?style=for-the-badge&logo=jetpackcompose&logoColor=%23FFFFFF&logoSize=auto"></a>
@@ -25,6 +26,8 @@
 
 SleepIn is an open-source, lightweight, and aesthetically pleasing Android course timetable app, designed to provide a simple, free, and ad-free course timetable management tool.
 
+📖 **Documentation**: [English Docs](https://sleepin.kurosu.qzz.io/en/) · [中文文档](https://sleepin.kurosu.qzz.io/)
+
 ## ✨ Features
 
 Some basic features that have been implemented so far:
@@ -32,6 +35,7 @@ Some basic features that have been implemented so far:
 - **Schedule Management**: Set up and manage daily routines. Create multiple schedules bound to different timetables, customize daily routine times, and configure class durations.
 - **Course Timetable Basics**: Add, edit, and delete courses with ease. View a clean and beautiful weekly timetable layout displaying all course information.
 - **Import and Export**: Support importing and exporting course data from CSV files, allowing users to quickly add courses and back up timetable information.
+- **Portal Import**: Sign in to your university's academic portal in the app's built-in browser and pull the timetable in with a community-maintained import preset; you can also import or write your own preset.
 - **Home Screen Widget**: Provide home screen widgets for quick access to course information at a glance.
 
 ## 📷 Screenshots

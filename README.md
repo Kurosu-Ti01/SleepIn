@@ -9,6 +9,7 @@
 
   <p align="center">
     <a href="https://www.gnu.org/licenses/gpl-3.0.en.html" target="_blank"><img alt="Static Badge" src="https://img.shields.io/badge/GPL_3.0-%23BD0000?style=for-the-badge&logo=gplv3&logoColor=FFFFFF&logoSize=auto&label=license"></a>
+    <a href="https://sleepin.kurosu.qzz.io/" target="_blank"><img alt="Static Badge" src="https://img.shields.io/badge/docs-%23847CF5?style=for-the-badge&logo=readthedocs&logoColor=%23FFFFFF&logoSize=auto"></a>
     <br>
     <a href="https://developer.android.com/" target="_blank"><img alt="Static Badge" src="https://img.shields.io/badge/android-%233DDC84?style=for-the-badge&logo=android&logoColor=%23FFFFFF&logoSize=auto"></a>
     <a href="https://developer.android.com/compose" target="_blank"><img alt="Static Badge" src="https://img.shields.io/badge/jetpack_compose-%234285F4?style=for-the-badge&logo=jetpackcompose&logoColor=%23FFFFFF&logoSize=auto"></a>
@@ -24,6 +25,8 @@
 **简体中文** | [English](./docs/README/README.en-US.md)
 
 SleepIn 是一个开源、轻量、美观的 Android 课程表应用，旨在提供一个简洁、免费、无广告的课程表管理工具。
+
+📖 **完整文档**：[中文文档](https://sleepin.kurosu.qzz.io/) · [English Docs](https://sleepin.kurosu.qzz.io/en/)
 
 ## ✨ 功能特性
 

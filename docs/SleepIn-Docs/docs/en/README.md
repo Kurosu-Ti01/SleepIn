@@ -1,4 +1,5 @@
 ---
+title: SleepIn Docs
 pageLayout: home
 config:
   - type: custom
@@ -24,19 +25,6 @@ config:
       - title: Local Privacy
         icon: mdi:shield-lock-outline
         details: Your data stays on your device. Fully open source, nothing is uploaded.
-  - type: image-text
-    title: Light and Dark, Equally Good
-    description: Follows your system appearance or switch manually. Both themes keep the timetable readable.
-    image:
-      light: /ScreenshotsLight01.jpg
-      dark: /ScreenshotsDark01.jpg
-    list:
-      - title: Dynamic Color
-        description: Supports Android 12+ dynamic color, so the UI follows your wallpaper.
-      - title: Multiple Semesters
-        description: One timetable per semester, load previous semesters from the menu at any time.
-      - title: Widget Follows the Active Timetable
-        description: The desktop widget only shows the active timetable and refreshes when you switch semesters.
 ---
 
 <CustomHome style="margin-top: -24px" />
