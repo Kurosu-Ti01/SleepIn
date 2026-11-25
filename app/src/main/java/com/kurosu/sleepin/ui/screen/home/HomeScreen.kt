@@ -1,6 +1,7 @@
 package com.kurosu.sleepin.ui.screen.home
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,6 +39,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,6 +61,14 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * - course detail bottom sheet,
  * - existing menu bottom sheet for quick switching.
  */
+/**
+ * Duration of the cross-fade from the loading skeleton to the real timetable.
+ *
+ * Long enough to read as a deliberate transition instead of a hard cut, short enough that it never
+ * adds noticeable delay to a launch that already waited for the data.
+ */
+private const val HOME_LOADING_FADE_MILLIS = 220
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -76,10 +87,18 @@ fun HomeScreen(
     val sharedVerticalScrollState = rememberScrollState()
 
     val pageCount = uiState.totalWeeks.coerceAtLeast(1)
-    val pagerState = rememberPagerState(
-        initialPage = (uiState.selectedWeek - 1).coerceIn(0, pageCount - 1),
-        pageCount = { pageCount }
-    )
+    // The state emitted before data arrives is a loading placeholder whose selectedWeek is 1, so a
+    // pager created from it would start on week 1 and then have to animate to the real week. Rebuilding
+    // the pager once active timetable data appears makes initialPage correct at the very first layout,
+    // which is what keeps launching the app free of the week-1-to-current-week flip. Later timetable
+    // switches keep the same pager instance, so their week animation is unchanged.
+    val hasActiveTimetableData = uiState.activeTimetableId != null
+    val pagerState = key(hasActiveTimetableData) {
+        rememberPagerState(
+            initialPage = (uiState.selectedWeek - 1).coerceIn(0, pageCount - 1),
+            pageCount = { pageCount }
+        )
+    }
 
     // Sync ViewModel week state when the user finishes swiping the HorizontalPager.
     LaunchedEffect(pagerState) {
@@ -105,7 +124,27 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // Header text arrives with the same state as the timetable, so it fades with it
+                    // instead of popping out of a blank title.
+                    AnimatedContent(
+                        targetState = uiState.isLoading,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(durationMillis = HOME_LOADING_FADE_MILLIS)) togetherWith
+                                fadeOut(animationSpec = tween(durationMillis = HOME_LOADING_FADE_MILLIS))
+                        },
+                        label = "homeTitleFade"
+                    ) { isLoading -> if (isLoading) {
+                        // Occupies the same height as the real two-line title so the header content does
+                        // not jump when the date and week number arrive.
+                        Column(
+                            modifier = Modifier.height(54.dp),
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            SkeletonBar(width = 128.dp, height = 22.dp)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            SkeletonBar(width = 56.dp, height = 10.dp)
+                        }
+                    } else Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         // Top line is always today's real date in bold, independent from selected week.
                         Text(
                             text = uiState.todayDateText,
@@ -157,6 +196,7 @@ fun HomeScreen(
                             }
                         }
                     }
+                    }
                 },
                 actions = {
                     IconButton(
@@ -190,13 +230,22 @@ fun HomeScreen(
                 .padding(innerPadding),
             contentAlignment = Alignment.TopStart
         ) {
-            when {
-                uiState.isLoading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(text = "加载中...", style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-
+            // A cold launch cannot render real data on the first frame: Room and DataStore deliver it
+            // asynchronously. The grid-shaped skeleton is cross-faded into the timetable instead of a
+            // hard cut from an otherwise empty screen.
+            AnimatedContent(
+                targetState = uiState.isLoading,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(durationMillis = HOME_LOADING_FADE_MILLIS)) togetherWith
+                        fadeOut(animationSpec = tween(durationMillis = HOME_LOADING_FADE_MILLIS))
+                },
+                label = "homeLoadingFade"
+            ) { isLoading -> if (isLoading) {
+                HomeSkeleton(
+                    rowHeight = courseRowHeightDp.dp,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else when {
                 !uiState.hasActiveTimetable -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -276,6 +325,7 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
             }
         }
     }

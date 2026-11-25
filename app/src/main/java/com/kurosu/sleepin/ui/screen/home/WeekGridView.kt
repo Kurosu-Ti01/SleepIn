@@ -27,10 +27,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-private const val WEEK_COLUMN_COUNT = 7
+internal const val WEEK_COLUMN_COUNT = 7
 private const val SWIPE_CHANGE_THRESHOLD_PX = 80f
 private val defaultRowHeight = 68.dp
-private val timelineColumnWidth = 34.dp
+
+/**
+ * Width of the period-number gutter. Shared with the loading skeleton so the placeholder grid and the
+ * real grid start at the same x position.
+ */
+internal val timelineColumnWidth = 34.dp
 
 /**
  * Full week-view container that composes header, sidebar, grid background, and course cells.
