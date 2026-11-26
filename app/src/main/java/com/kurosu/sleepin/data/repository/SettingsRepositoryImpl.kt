@@ -45,6 +45,7 @@ class SettingsRepositoryImpl(
                 ?: ThemeMode.SYSTEM,
             dynamicColorEnabled = prefs[Keys.DYNAMIC_COLOR_ENABLED] ?: true,
             courseCellHeightDp = (prefs[Keys.COURSE_CELL_HEIGHT_DP] ?: 68).coerceIn(44, 120),
+            courseCellFontSizeSp = (prefs[Keys.COURSE_CELL_FONT_SIZE_SP] ?: 12).coerceIn(8, 20),
             showNonCurrentWeekCourses = prefs[Keys.SHOW_NON_CURRENT_WEEK_COURSES] ?: false,
             autoCheckUpdateEnabled = prefs[Keys.AUTO_CHECK_UPDATE_ENABLED] ?: true,
             updateAvailable = prefs[Keys.UPDATE_AVAILABLE] ?: false,
@@ -72,6 +73,7 @@ class SettingsRepositoryImpl(
             prefs[Keys.THEME_MODE] = settings.themeMode.ordinal
             prefs[Keys.DYNAMIC_COLOR_ENABLED] = settings.dynamicColorEnabled
             prefs[Keys.COURSE_CELL_HEIGHT_DP] = settings.courseCellHeightDp.coerceIn(44, 120)
+            prefs[Keys.COURSE_CELL_FONT_SIZE_SP] = settings.courseCellFontSizeSp.coerceIn(8, 20)
             prefs[Keys.SHOW_NON_CURRENT_WEEK_COURSES] = settings.showNonCurrentWeekCourses
             prefs[Keys.AUTO_CHECK_UPDATE_ENABLED] = settings.autoCheckUpdateEnabled
             prefs[Keys.UPDATE_AVAILABLE] = settings.updateAvailable
@@ -100,6 +102,7 @@ class SettingsRepositoryImpl(
             themeMode = current.themeMode.name,
             dynamicColorEnabled = current.dynamicColorEnabled,
             courseCellHeightDp = current.courseCellHeightDp,
+            courseCellFontSizeSp = current.courseCellFontSizeSp,
             showNonCurrentWeekCourses = current.showNonCurrentWeekCourses,
             autoCheckUpdateEnabled = current.autoCheckUpdateEnabled,
             updateAvailable = current.updateAvailable,
@@ -127,6 +130,7 @@ class SettingsRepositoryImpl(
             themeMode = ThemeMode.entries.firstOrNull { it.name == payload.themeMode } ?: ThemeMode.SYSTEM,
             dynamicColorEnabled = payload.dynamicColorEnabled,
             courseCellHeightDp = payload.courseCellHeightDp.coerceIn(44, 120),
+            courseCellFontSizeSp = payload.courseCellFontSizeSp.coerceIn(8, 20),
             showNonCurrentWeekCourses = payload.showNonCurrentWeekCourses,
             autoCheckUpdateEnabled = payload.autoCheckUpdateEnabled,
             updateAvailable = payload.updateAvailable,
@@ -156,6 +160,7 @@ class SettingsRepositoryImpl(
         val THEME_MODE = intPreferencesKey("theme_mode")
         val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         val COURSE_CELL_HEIGHT_DP = intPreferencesKey("course_cell_height_dp")
+        val COURSE_CELL_FONT_SIZE_SP = intPreferencesKey("course_cell_font_size_sp")
         val SHOW_NON_CURRENT_WEEK_COURSES = booleanPreferencesKey("show_non_current_week_courses")
         val AUTO_CHECK_UPDATE_ENABLED = booleanPreferencesKey("auto_check_update_enabled")
         val UPDATE_AVAILABLE = booleanPreferencesKey("update_available")
@@ -181,6 +186,7 @@ class SettingsRepositoryImpl(
         val themeMode: String,
         val dynamicColorEnabled: Boolean,
         val courseCellHeightDp: Int,
+        val courseCellFontSizeSp: Int = 12,
         val showNonCurrentWeekCourses: Boolean = false,
         val autoCheckUpdateEnabled: Boolean = true,
         val updateAvailable: Boolean = false,

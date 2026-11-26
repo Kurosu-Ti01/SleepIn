@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.Height
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
@@ -396,6 +397,18 @@ fun SettingsScreen(
                     value = uiState.settings.courseCellHeightDp.toFloat(),
                     onValueChange = { viewModel.setCourseCellHeightDp(it.toInt()) },
                     valueRange = 44f..120f,
+                    modifier = Modifier.padding(start = 48.dp, end = 8.dp)
+                )
+                SettingsGroupDivider()
+                SettingsValueRow(
+                    leadingIcon = Icons.Outlined.FormatSize,
+                    title = "课程卡片字号",
+                    valueText = "${uiState.settings.courseCellFontSizeSp} sp"
+                )
+                Slider(
+                    value = uiState.settings.courseCellFontSizeSp.toFloat(),
+                    onValueChange = { viewModel.setCourseCellFontSizeSp(it.toInt()) },
+                    valueRange = 8f..20f,
                     modifier = Modifier.padding(start = 48.dp, end = 8.dp)
                 )
                 SettingsGroupDivider()

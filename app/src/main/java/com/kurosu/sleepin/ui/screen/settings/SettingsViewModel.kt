@@ -105,6 +105,15 @@ class SettingsViewModel(
     fun setCourseCellHeightDp(heightDp: Int) =
         updateSettings { it.copy(courseCellHeightDp = heightDp.coerceIn(44, 120)) }
 
+    /**
+     * Sets the font size of the text inside week-grid course blocks.
+     *
+     * Coerced to the same 8–20 sp range the settings slider and the repository enforce, so a value
+     * coming from a restored backup cannot render unreadable or overflowing cells.
+     */
+    fun setCourseCellFontSizeSp(fontSizeSp: Int) =
+        updateSettings { it.copy(courseCellFontSizeSp = fontSizeSp.coerceIn(8, 20)) }
+
     fun setShowNonCurrentWeekCourses(enabled: Boolean) =
         updateSettings { it.copy(showNonCurrentWeekCourses = enabled) }
 

@@ -30,6 +30,14 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColorEnabled: Boolean = true,
     val courseCellHeightDp: Int = 68,
+    /**
+     * Font size of the text drawn inside a week-grid course block, in sp.
+     *
+     * Deliberately independent from [courseCellHeightDp]: a dense schedule needs the two tuned
+     * separately, because raising only the row height leaves the text unreadable and lowering only
+     * the text size leaves empty space in every block.
+     */
+    val courseCellFontSizeSp: Int = 12,
     val showNonCurrentWeekCourses: Boolean = false,
     val autoCheckUpdateEnabled: Boolean = true,
     val updateAvailable: Boolean = false,

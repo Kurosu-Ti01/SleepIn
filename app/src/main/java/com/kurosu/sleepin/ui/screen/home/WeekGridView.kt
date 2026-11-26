@@ -42,6 +42,10 @@ internal val timelineColumnWidth = 34.dp
  *
  * Accepts an optional shared [verticalScrollState] so pages inside a [androidx.compose.foundation.pager.HorizontalPager]
  * keep their vertical scroll position aligned as the user swipes horizontally across weeks.
+ *
+ * @param rowHeight height of one period row, driven by the "课程卡片高度" setting.
+ * @param courseFontSizeSp font size of the text inside each course block, driven by the
+ *   "课程卡片字号" setting; see [CourseCell] for how it scales the block's text.
  */
 @Composable
 fun WeekGridView(
@@ -55,7 +59,8 @@ fun WeekGridView(
     onSwipeToNextWeek: (() -> Unit)? = null,
     verticalScrollState: ScrollState = rememberScrollState(),
     modifier: Modifier = Modifier,
-    rowHeight: Dp = defaultRowHeight
+    rowHeight: Dp = defaultRowHeight,
+    courseFontSizeSp: Int = COURSE_CELL_DEFAULT_FONT_SIZE_SP
 ) {
     val swipeModifier = if (onSwipeToPreviousWeek != null && onSwipeToNextWeek != null) {
         Modifier.pointerInput(Unit) {
@@ -111,6 +116,7 @@ fun WeekGridView(
                     todayColumnIndex = todayColumnIndex,
                     currentTimePeriodOffset = currentTimePeriodOffset,
                     rowHeight = rowHeight,
+                    courseFontSizeSp = courseFontSizeSp,
                     onCourseClick = onCourseClick
                 )
             }
@@ -126,6 +132,7 @@ private fun WeekGridContent(
     todayColumnIndex: Int?,
     currentTimePeriodOffset: Float?,
     rowHeight: Dp,
+    courseFontSizeSp: Int,
     onCourseClick: (HomeCourseCellUi) -> Unit
 ) {
     val gridLineColor = MaterialTheme.colorScheme.outlineVariant
@@ -211,6 +218,7 @@ private fun WeekGridContent(
             CourseCell(
                 cell = course,
                 onClick = onCourseClick,
+                fontSizeSp = courseFontSizeSp,
                 modifier = Modifier
                     .padding(2.dp)
                     .width(dayWidth - 4.dp)

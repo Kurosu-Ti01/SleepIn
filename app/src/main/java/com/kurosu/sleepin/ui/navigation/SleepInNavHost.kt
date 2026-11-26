@@ -114,6 +114,7 @@ fun SleepInNavHost(
                     navController.navigate(Screen.ScheduleEditor.createRoute(scheduleId))
                 },
                 courseRowHeightDp = appSettings.courseCellHeightDp,
+                courseFontSizeSp = appSettings.courseCellFontSizeSp,
                 viewModel = vm
             )
         }

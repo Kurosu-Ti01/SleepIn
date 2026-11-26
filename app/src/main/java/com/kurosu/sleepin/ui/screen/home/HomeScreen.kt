@@ -77,6 +77,7 @@ fun HomeScreen(
     onSettingsClick: () -> Unit,
     onEditScheduleClick: (Long) -> Unit,
     courseRowHeightDp: Int,
+    courseFontSizeSp: Int,
     viewModel: HomeViewModel
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -319,6 +320,7 @@ fun HomeScreen(
                                     onCourseClick = { clicked -> selectedCourse = clicked },
                                     verticalScrollState = sharedVerticalScrollState,
                                     rowHeight = courseRowHeightDp.dp,
+                                    courseFontSizeSp = courseFontSizeSp,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
